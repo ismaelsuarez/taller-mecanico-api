@@ -21,6 +21,15 @@ if command -v npx >/dev/null 2>&1; then
 else
   echo "   Falta Node.js/npx: instalalo y corré 'npx -y skills experimental_install'"
 fi
+# Claude Code reads project skills from .claude/skills/; the restore only fills .agents/skills/.
+mkdir -p .claude/skills
+for dir in .agents/skills/*/; do
+  name=$(basename "$dir")
+  [ -e ".claude/skills/$name" ] && continue
+  ln -s "../../.agents/skills/$name" ".claude/skills/$name" 2>/dev/null \
+    || cp -r ".agents/skills/$name" ".claude/skills/$name"
+done
+echo "   Skills disponibles para Claude Code en .claude/skills/: $(ls .claude/skills | wc -l)"
 
 echo "== 3/3 Memoria de engram"
 if command -v engram >/dev/null 2>&1; then
