@@ -1,0 +1,1 @@
+"""Reglas de negocio; recibe el Unit of Work y lo abre del módulo ordenes (OrdenTrabajo, EstadoOrden, ItemOrden e HistorialEstadoOrden). Se completa en EJ-2 (modelos) y EJ-6 (órdenes y Unit of Work)."""

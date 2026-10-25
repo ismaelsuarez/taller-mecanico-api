@@ -1,0 +1,33 @@
+# Entorno del equipo (DD-32). Todas las credenciales salen del .env: este archivo no tiene secretos.
+services:
+  db:
+    image: postgres:16
+    # La imagen oficial usa los mismos nombres que la app (POSTGRES_USER, POSTGRES_PASSWORD,
+    # POSTGRES_DB); el script de init además recibe POSTGRES_TEST_DB.
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - datos_pg:/var/lib/postgresql/data
+      # Sólo se ejecuta con el volumen vacío; para recrearlo: docker compose down -v
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  datos_pg:

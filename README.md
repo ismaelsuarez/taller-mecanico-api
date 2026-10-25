@@ -2,7 +2,67 @@
 
 API REST asincrónica para un taller mecánico: clientes y vehículos, órdenes de trabajo, stock de repuestos y control de acceso por roles. Trabajo práctico integrador de **Programación III (UTN)**, capítulos 1 a 6, con FastAPI, SQLModel, SQLAlchemy 2.0 async, PostgreSQL 16 y Alembic.
 
-> La puesta en marcha de la aplicación (entorno virtual, `.env`, Alembic, `seed.py`, Docker) se documenta en el change **EJ-1** (ver [CHANGES.md](CHANGES.md)).
+## Puesta en marcha
+
+### 1. Configuración (`.env`)
+
+```bash
+cp env.example .env
+chmod 600 .env
+```
+
+Completá en `.env` los dos valores obligatorios (sin ellos la aplicación **no arranca**):
+
+- `POSTGRES_PASSWORD`: la contraseña de tu base local.
+- `JWT_SECRET`: la clave de firma de los tokens. Generala **una sola vez** y no la cambies (si cambia, todas las sesiones dejan de valer):
+
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(64))"
+  ```
+
+> `.env` nunca se sube al repositorio. `env.example` es sólo la plantilla y no lleva secretos.
+
+### 2a. Con Docker (recomendado para el equipo)
+
+```bash
+docker compose up -d --build       # api (puerto 8000) + db (postgres:16, puerto 5432)
+curl localhost:8000/health/ready   # {"estado":"listo"}
+```
+
+La primera vez que se crea el volumen de la base se crea también la base de test (`POSTGRES_TEST_DB`). Ese script **sólo corre con el volumen vacío**: si levantaste `db` antes de tener `POSTGRES_TEST_DB` en el `.env`, recrealo con `docker compose down -v && docker compose up -d` (borra los datos locales de desarrollo).
+
+### 2b. Sin Docker (entorno virtual)
+
+Usá **Python 3.12** (la misma versión que la imagen Docker; con 3.13 o 3.14 algunas dependencias pueden no tener paquetes listos).
+
+```bash
+python3.12 -m venv .venv            # o: uv venv --python 3.12
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
+pip install -r requirements.txt     # o: uv pip install -r requirements.txt
+uvicorn main:app --reload           # o: fastapi dev main.py
+```
+
+Necesitás una PostgreSQL 16 accesible con los datos del `.env` (`POSTGRES_HOST=localhost`). La forma más simple es levantar sólo la base de Docker: `docker compose up -d db`.
+
+### 3. Esquema y datos iniciales
+
+`alembic upgrade head` y `python seed.py` llegan en **EJ-2** (`02-modelos-migraciones-seed`). Con Docker se corren dentro del contenedor: `docker compose exec api alembic upgrade head` y `docker compose exec api python seed.py`.
+
+### 4. Tests
+
+```bash
+docker compose up -d db             # los tests usan una PostgreSQL real (base POSTGRES_TEST_DB)
+pytest -rs                          # con el venv activo
+```
+
+Si la base de test no está disponible, los tests que la necesitan se **saltean** con el motivo; antes de cerrar un change tienen que correr con **0 skipped**. Los casos manuales están en `test/*.http` (extensión REST Client de VS Code), con la respuesta esperada en comentarios.
+
+### Salud del servicio
+
+| Ruta | Responde |
+|---|---|
+| `GET /health/live` | 200 mientras el proceso esté vivo (no consulta la base) |
+| `GET /health/ready` | 200 si la base contesta, 503 si no |
 
 ## Primer uso después de clonar (una sola vez)
 

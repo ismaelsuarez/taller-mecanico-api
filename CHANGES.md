@@ -116,7 +116,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 1 — Fundaciones del proyecto
 
 ### [EJ-1] `01-proyecto-config-lifespan`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` hecho (EJ-1: 30 tests en verde, 0 skipped)
 - **Ejercicio / puntos**: Ejercicio 1 — 8 pts (8 %)
 - **Scope**:
   - Repositorio compartido: ya creado en la fundación (ver nota de arriba); `.gitignore` ya cubre `.env`, `.venv`, `__pycache__`. EJ-1 sólo agrega lo que haga falta para Docker (p. ej. `.dockerignore`) y completa el `README.md` existente con la puesta en marcha de la app (Docker y venv).

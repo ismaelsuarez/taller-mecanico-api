@@ -154,6 +154,20 @@
 **Justificación**: entorno idéntico para todo el equipo en los relevos.
 **Trade-offs aceptados**: más trabajo en EJ-1 y dos caminos de arranque que mantener documentados.
 
+### DD-33 — Un secreto vacío cuenta como faltante (EJ-1)
+**Decisión**: `JWT_SECRET` y `POSTGRES_PASSWORD` exigen al menos un carácter: vacíos, la aplicación no arranca y el error nombra la variable.
+**Contexto**: `env.example` trae los secretos vacíos a propósito; copiarlo como `.env` sin completarlo dejaba la variable *definida pero vacía*, y la app arrancaba firmando tokens con una clave vacía.
+**Justificación**: detectado durante la implementación de EJ-1; cubierto por `test_un_secreto_vacio_cuenta_como_faltante` y verificado con Docker (sale con código 3 y no muestra secretos).
+
+### DD-34 — Convenciones de los tests automáticos (EJ-1)
+**Decisión**: para todos los changes siguientes:
+- `test/` y `test/pytest/` **no** llevan `__init__.py`: `test` chocaría con el paquete `test` de la biblioteca estándar de Python. Las utilidades compartidas se importan con `from conftest import ...` (pytest agrega esa carpeta al path; `pytest.ini` define `pythonpath = .`).
+- La fixture `configurar_entorno` fuerza `JWT_SECRET` de test, apunta `POSTGRES_DB` a `POSTGRES_TEST_DB` (nunca a la base de desarrollo) y baja `BCRYPT_ROUNDS` a 4 para que los tests sean rápidos.
+- `aplicacion_iniciada()` corre el lifespan real (httpx `ASGITransport` no lo dispara solo); `cliente_http(app)` da el cliente.
+- Para simular caídas de la base se usa un puerto sin servicio o el `ProxyTCP` de `test_salud.py`; no hace falta detener Docker.
+- Cierre de cada change: `pytest -rs` con `db` levantada y **0 skipped**.
+**Contexto**: el venv del proyecto es Python 3.12 (`uv venv --python 3.12`); quedó instalado bcrypt 5, que **lanza una excepción con contraseñas de más de 72 bytes** (lo valida el contrato en EJ-4).
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

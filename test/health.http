@@ -1,0 +1,22 @@
+# Sondas de salud (EJ-1). Extensión REST Client de VS Code.
+# Requisito: la app levantada (docker compose up -d, o uvicorn main:app con el venv).
+# No hace falta correr seed.py ni iniciar sesión: las sondas son públicas.
+
+@baseUrl = http://localhost:8000
+
+### Vida: no consulta la base
+# Esperado: 200 OK
+# {"estado": "vivo"}
+GET {{baseUrl}}/health/live
+
+### Preparación con la base disponible
+# Esperado: 200 OK
+# {"estado": "listo"}
+GET {{baseUrl}}/health/ready
+
+### Preparación con la base detenida
+# Antes de ejecutar: docker compose stop db   (después: docker compose start db)
+# Esperado: 503 Service Unavailable
+# {"estado": "no listo", "detalle": "La base de datos no está disponible en este momento."}
+# /health/live sigue respondiendo 200 aunque la base esté detenida.
+GET {{baseUrl}}/health/ready

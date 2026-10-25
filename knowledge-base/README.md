@@ -14,7 +14,7 @@ Base de conocimiento generada a partir de `docs/TP_Cap1a6_Consigna.pdf` (Program
 | [06_funcionalidades.md](06_funcionalidades.md) | Épicas por ejercicio (Ej. 1–8) e historias US-001..US-024 con criterios |
 | [07_flujos_principales.md](07_flujos_principales.md) | Registro, login, petición protegida, roles, órdenes (alta/iniciar/terminar/cancelar), stock, precios, paginación |
 | [08_arquitectura_propuesta.md](08_arquitectura_propuesta.md) | Patrones, estructura de directorios obligatoria, seguridad, variables de entorno |
-| [09_decisiones_y_supuestos.md](09_decisiones_y_supuestos.md) | DD-01..DD-20 (incluye pedidos verbales del docente) y supuestos SU-01..SU-14 |
+| [09_decisiones_y_supuestos.md](09_decisiones_y_supuestos.md) | DD-01..DD-34 (incluye pedidos verbales del docente) y supuestos SU-01..SU-14 |
 | [10_preguntas_abiertas.md](10_preguntas_abiertas.md) | Inconsistencias IN-01..IN-04 y preguntas para la cátedra |
 | [11_casos_de_prueba_y_entrega.md](11_casos_de_prueba_y_entrega.md) | Casos C-01..C-19, requisitos no funcionales, criterios de evaluación, formato de entrega |
 

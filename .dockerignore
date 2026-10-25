@@ -1,0 +1,31 @@
+# Secretos y entornos locales
+.env
+.venv/
+venv/
+
+# Control de versiones y herramientas del equipo (no hacen falta para correr la app)
+.git/
+.githooks/
+.engram/
+.agents/
+.claude/
+.atl/
+openspec/
+knowledge-base/
+docs/
+scripts/
+
+# Caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Documentación y archivos del equipo
+*.md
+!README.md
+.active-orchestrator-state.json
+skills-lock.json
+Dockerfile
+docker-compose.yml
+.dockerignore
+.gitignore
