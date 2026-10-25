@@ -155,3 +155,31 @@ async def test_ready_responde_200_tras_un_reinicio_de_la_base_sin_peticiones_en_
 
     await proxy.apagar()
     assert despues_del_reinicio == 200
+
+
+async def test_el_503_registra_la_causa_en_el_log_sin_secretos(configurar_entorno, caplog):
+    configurar_entorno(
+        POSTGRES_HOST="127.0.0.1",
+        POSTGRES_PORT=str(puerto_libre()),
+        POSTGRES_PASSWORD="pass-que-no-va-al-log",
+        JWT_SECRET="clave-que-no-va-al-log",
+    )
+
+    with caplog.at_level("WARNING", logger="app.salud"):
+        async with aplicacion_iniciada() as app, cliente_http(app) as cliente:
+            assert (await cliente.get("/health/ready")).status_code == 503
+
+    avisos = [registro for registro in caplog.records if registro.name == "app.salud"]
+    assert len(avisos) == 1
+    assert "ConnectionRefusedError" in avisos[0].getMessage()
+    assert "pass-que-no-va-al-log" not in caplog.text
+    assert "clave-que-no-va-al-log" not in caplog.text
+
+
+def test_sin_base_que_responda_se_saltea_con_un_motivo_claro(monkeypatch):
+    monkeypatch.setenv("POSTGRES_TEST_DB", "taller_test")
+    monkeypatch.setenv("POSTGRES_HOST", "127.0.0.1")
+    monkeypatch.setenv("POSTGRES_PORT", str(puerto_libre()))
+
+    with pytest.raises(pytest.skip.Exception, match="no responde"):
+        requiere_base_de_test()

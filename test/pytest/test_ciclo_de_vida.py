@@ -70,3 +70,29 @@ async def test_hashear_password_produce_un_hash_bcrypt_verificable(monkeypatch):
     resultado = await security.hashear_password("una-contrasena", rondas=4)
 
     assert bcrypt.checkpw(b"una-contrasena", resultado.encode())
+
+
+async def test_si_el_arranque_falla_despues_de_crear_el_motor_igual_se_libera(configurar_entorno, monkeypatch):
+    import main
+
+    configurar_entorno()
+    motores = []
+    crear_motor_original = main.crear_motor
+
+    def crear_motor_registrado(settings):
+        motor = crear_motor_original(settings)
+        motores.append((motor, motor.pool))
+        return motor
+
+    async def hash_que_falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado durante el arranque")
+
+    monkeypatch.setattr(main, "crear_motor", crear_motor_registrado)
+    monkeypatch.setattr(main, "hashear_password", hash_que_falla)
+
+    with pytest.raises(RuntimeError, match="fallo simulado"):
+        async with aplicacion_iniciada():
+            pass
+
+    motor, pool_inicial = motores[0]
+    assert motor.pool is not pool_inicial

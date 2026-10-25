@@ -6,6 +6,7 @@ verificación de cierre de cada change exige correrlos con la base levantada (0 
 """
 
 import os
+import socket
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -63,6 +64,12 @@ async def cliente_http(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 def requiere_base_de_test() -> None:
-    """Saltea el test con un motivo claro si no hay base de test configurada."""
+    """Saltea el test con un motivo claro si no hay base de test configurada o si no responde."""
     if not leer_variable("POSTGRES_TEST_DB"):
         pytest.skip("Falta POSTGRES_TEST_DB: levantá la base (docker compose up -d db) y definila en .env")
+    host = leer_variable("POSTGRES_HOST") or "localhost"
+    puerto = int(leer_variable("POSTGRES_PORT") or 5432)
+    try:
+        socket.create_connection((host, puerto), timeout=1).close()
+    except OSError:
+        pytest.skip(f"La base de test no responde en {host}:{puerto}: levantala con docker compose up -d db")

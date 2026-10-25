@@ -25,7 +25,7 @@ Completá en `.env` los dos valores obligatorios (sin ellos la aplicación **no 
 ### 2a. Con Docker (recomendado para el equipo)
 
 ```bash
-docker compose up -d --build       # api (puerto 8000) + db (postgres:16, puerto 5432)
+docker compose up -d --build       # api (puerto 8000) + db (postgres:16, puerto 5432 sólo en 127.0.0.1)
 curl localhost:8000/health/ready   # {"estado":"listo"}
 ```
 

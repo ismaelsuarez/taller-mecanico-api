@@ -168,6 +168,10 @@
 - Cierre de cada change: `pytest -rs` con `db` levantada y **0 skipped**.
 **Contexto**: el venv del proyecto es Python 3.12 (`uv venv --python 3.12`); quedó instalado bcrypt 5, que **lanza una excepción con contraseñas de más de 72 bytes** (lo valida el contrato en EJ-4).
 
+### DD-35 — Correcciones de la revisión del EJ-1
+**Decisión**: se corrigieron las 4 advertencias de la revisión `review-cf431af11a3fca38` (change `fix-advertencias-revision-ej1`): PostgreSQL de Docker publicada sólo en `127.0.0.1`; `/health/ready` registra en el logger `app.salud` el **tipo** de falla de cada 503 (nunca el mensaje ni secretos); el motor se libera aunque el arranque falle después de crearlo; los tests con base se saltean si la base no responde.
+**Pendiente (sugerencias no bloqueantes, para cuando toque esos archivos)**: `url_base_datos` aparece en `Settings.model_dump()` con la contraseña (no serializar ni loguear `settings`); `pg_isready` del healthcheck sin `-h 127.0.0.1`; la sonda de preparación comparte el pool de la app; `ProxyTCP` de los tests no cierra el lado cliente si falla la conexión a la base.
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

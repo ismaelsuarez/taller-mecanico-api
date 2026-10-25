@@ -16,15 +16,16 @@ from app.modules.health.router import router as router_salud
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = obtener_settings()
     motor = crear_motor(settings)
-    configurar_semaforo_bcrypt(settings.bcrypt_max_concurrency)
-
-    app.state.settings = settings
-    app.state.motor = motor
-    app.state.fabrica_sesiones = crear_fabrica_sesiones(motor)
-    # Hash de un texto cualquiera: el login lo usa con correos inexistentes para tardar lo mismo (RN-09).
-    # No es un secreto; se calcula una sola vez al arrancar.
-    app.state.hash_ficticio = await hashear_password(secrets.token_urlsafe(16), settings.bcrypt_rounds)
+    # El motor se libera también si el arranque falla o se cancela después de crearlo.
     try:
+        configurar_semaforo_bcrypt(settings.bcrypt_max_concurrency)
+
+        app.state.settings = settings
+        app.state.motor = motor
+        app.state.fabrica_sesiones = crear_fabrica_sesiones(motor)
+        # Hash de un texto cualquiera: el login lo usa con correos inexistentes para tardar lo mismo (RN-09).
+        # No es un secreto; se calcula una sola vez al arrancar.
+        app.state.hash_ficticio = await hashear_password(secrets.token_urlsafe(16), settings.bcrypt_rounds)
         yield
     finally:
         await motor.dispose()
