@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Runs after `git pull` (merge strategy): imports the team's Engram memory.
+# Never blocks git: any failure only prints a warning.
+exec "$(git rev-parse --show-toplevel)/.githooks/_engram-import.sh"

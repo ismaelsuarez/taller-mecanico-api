@@ -1,0 +1,35 @@
+# Local AI runtime state (regenerated per machine)
+.atl/
+
+# Secrets and local environment
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+
+# Third-party project skills: restored from skills-lock.json by scripts/setup.sh.
+# Only the 5 skills vendored in the repo (no public source) are versioned.
+.agents/skills/*
+!.agents/skills/work-unit-commits/
+!.agents/skills/cognitive-doc-design/
+!.agents/skills/kb-creator/
+!.agents/skills/roadmap-generator/
+!.agents/skills/agent-instruction/
+.claude/skills/*
+!.claude/skills/work-unit-commits
+!.claude/skills/cognitive-doc-design
+!.claude/skills/kb-creator
+!.claude/skills/roadmap-generator
+!.claude/skills/agent-instruction

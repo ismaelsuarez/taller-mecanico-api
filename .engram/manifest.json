@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "chunks": [
+    {
+      "id": "09e543bf",
+      "created_by": "devops",
+      "created_at": "2026-10-25T15:25:24.537759188Z",
+      "sessions": 1,
+      "memories": 8,
+      "prompts": 8
+    },
+    {
+      "id": "0a7f48ee",
+      "created_by": "devops",
+      "created_at": "2026-10-25T15:27:27.356171075Z",
+      "sessions": 1,
+      "memories": 1,
+      "prompts": 0
+    },
+    {
+      "id": "e9029e22",
+      "created_by": "devops",
+      "created_at": "2026-10-25T15:28:50.585235855Z",
+      "sessions": 0,
+      "memories": 0,
+      "prompts": 0
+    }
+  ]
+}
