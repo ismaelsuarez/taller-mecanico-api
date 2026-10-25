@@ -153,7 +153,7 @@ El plan de implementación completo está en [CHANGES.md](CHANGES.md). Resumen:
 4. /opsx:apply (cargando skills, TDD con pytest)          → respetando las reglas duras
 5. Definition of Done: .http del ejercicio + alembic up/down/up + seed
 6. /opsx:archive 0N-nombre + marcar [x] + commit
-7. bash scripts/sync-memoria.sh + git push               → relevo al siguiente compañero
+7. bash scripts/sync-memoria.sh (Windows: scripts\sync-memoria.bat) + git push → relevo
 ```
 
 Aplicar TODAS las reglas duras en cada paso. Ante conflicto entre la KB y este archivo, las reglas duras prevalecen.

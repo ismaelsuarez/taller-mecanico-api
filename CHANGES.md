@@ -26,7 +26,7 @@ El trabajo en equipo es **estrictamente secuencial**. No hay ramas paralelas, no
   3. `python seed.py` sigue dejando el estado inicial conocido.
   4. `README.md` y `env.example` actualizados con lo que el change agregó (pasos de puesta en marcha, variables nuevas).
   5. Sin credenciales en el repositorio (`.env` en `.gitignore`).
-  6. `/opsx:archive` ejecutado, `commit` (Conventional Commits, p. ej. `feat(02-modelos-migraciones-seed): ...`), `bash scripts/sync-memoria.sh` (exporta y commitea la memoria de engram) y `push`.
+  6. `/opsx:archive` ejecutado, `commit` (Conventional Commits, p. ej. `feat(02-modelos-migraciones-seed): ...`), `bash scripts/sync-memoria.sh` (en Windows: `scripts\sync-memoria.bat`; exporta y commitea la memoria de engram) y `push`.
   7. Checkbox de este archivo marcado y, si quedaron decisiones o supuestos nuevos, anotados en `knowledge-base/09_decisiones_y_supuestos.md` / `10_preguntas_abiertas.md` para el siguiente compañero.
 
 > El repositorio compartido ya existe desde la fundación: **https://github.com/ismaelsuarez/taller-mecanico-api** (público), con `.gitignore`, hooks de engram (`.githooks/`), `scripts/setup.sh`, `scripts/sync-memoria.sh` y skills del proyecto (`skills-lock.json` + `.agents/skills/`).

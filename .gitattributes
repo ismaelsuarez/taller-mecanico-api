@@ -1,0 +1,14 @@
+# Line endings that work on Linux, macOS and Windows checkouts.
+* text=auto
+
+# Shell scripts and git hooks must keep LF: bash fails on CRLF ("\r: command not found").
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# Windows batch scripts need CRLF for cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.pdf binary
+*.gz binary

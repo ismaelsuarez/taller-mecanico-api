@@ -80,6 +80,8 @@ bash scripts/setup.sh
 
 Requisitos: Git, Node.js (para `npx`) y [engram](https://github.com/Gentleman-Programming/engram). Si falta alguno, el script avisa y sigue.
 
+**Windows**: corré `bash scripts/setup.sh` desde **Git Bash** (viene con Git for Windows); los hooks de git también corren con ese bash. Para exportar la memoria antes de un push podés usar `scripts\sync-memoria.bat` desde `cmd` o PowerShell. El `.gitattributes` del repo mantiene los `.sh` con fin de línea LF y los `.bat` con CRLF.
+
 > Git no activa hooks al clonar (es una protección de seguridad); por eso este paso es manual y se hace una sola vez.
 
 ## Flujo de trabajo del equipo (relevos)
@@ -93,7 +95,7 @@ git pull                                   # trae el código y, por el hook, la 
 # Definition of Done del change (ver CHANGES.md)
 /opsx:archive 0N-nombre-del-change
 git commit ...                             # incluye el checkbox [x] en CHANGES.md
-bash scripts/sync-memoria.sh               # exporta y commitea tu memoria de engram
+bash scripts/sync-memoria.sh               # exporta y commitea tu memoria (Windows: scripts\sync-memoria.bat)
 git push                                   # relevo al siguiente compañero
 ```
 
