@@ -46,7 +46,34 @@ Necesitás una PostgreSQL 16 accesible con los datos del `.env` (`POSTGRES_HOST=
 
 ### 3. Esquema y datos iniciales
 
-`alembic upgrade head` y `python seed.py` llegan en **EJ-2** (`02-modelos-migraciones-seed`). Con Docker se corren dentro del contenedor: `docker compose exec api alembic upgrade head` y `docker compose exec api python seed.py`.
+El esquema se crea **sólo con Alembic** (nunca `create_all`); el catálogo de estados y los datos iniciales los carga `seed.py`.
+
+```bash
+# Con Docker (recomendado):
+docker compose exec api alembic upgrade head
+docker compose exec api python seed.py
+
+# Sin Docker (venv activo):
+alembic upgrade head
+python seed.py
+```
+
+Para verificar el ciclo completo de migraciones (sube, baja y vuelve a subir):
+
+```bash
+alembic upgrade head
+alembic downgrade base
+alembic upgrade head
+python seed.py          # el seed siempre se corre después de migrar
+```
+
+Para recrear la base de test (borra los datos locales de desarrollo):
+
+```bash
+docker compose down -v && docker compose up -d
+```
+
+`seed.py` es **idempotente**: correrlo dos veces deja el mismo estado. Vacía las tablas con `TRUNCATE` y recarga: catálogo de estados (PENDIENTE, EN_REPARACION, TERMINADA, CANCELADA), 7 usuarios con sus roles, Laura y Jorge con sus vehículos, 4 repuestos con su movimiento «Stock inicial», 2 órdenes de trabajo con sus historiales, el historial de precios del filtro y un evento de seguridad con actor `SISTEMA`. Las contraseñas de prueba viven **sólo** en `seed.py` (no son credenciales reales).
 
 ### 4. Tests
 

@@ -147,7 +147,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 2 — Datos: modelos, migraciones y datos iniciales
 
 ### [EJ-2] `02-modelos-migraciones-seed`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado (2026-10-26)
 - **Ejercicio / puntos**: Ejercicio 2 — 14 pts (14 %)
 - **Scope**:
   - Modelos SQLModel en `app/modules/*/models.py` con los **nombres obligatorios** de tablas y columnas: `usuario`, `asignacion_rol`, `intento_acceso`, `evento_seguridad`, `cliente`, `vehiculo`, `repuesto`, `estado_orden`, `orden_trabajo`, `item_orden`, `historial_estado_orden`, `movimiento_stock`, `historial_precio_repuesto` (clase `HistorialPrecio`, IN-02).

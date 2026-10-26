@@ -169,8 +169,19 @@
 **Contexto**: el venv del proyecto es Python 3.12 (`uv venv --python 3.12`); quedó instalado bcrypt 5, que **lanza una excepción con contraseñas de más de 72 bytes** (lo valida el contrato en EJ-4).
 
 ### DD-35 — Correcciones de la revisión del EJ-1
-**Decisión**: se corrigieron las 4 advertencias de la revisión `review-cf431af11a3fca38` (change `fix-advertencias-revision-ej1`): PostgreSQL de Docker publicada sólo en `127.0.0.1`; `/health/ready` registra en el logger `app.salud` el **tipo** de falla de cada 503 (nunca el mensaje ni secretos); el motor se libera aunque el arranque falle después de crearlo; los tests con base se saltean si la base no responde.
+**Decisión**: se corrigieron las 4 advertencias de la revisión `review-cf431af11a3fca38` (change `fix-advertencias-revision-ej1`): PostgreSQL de Docker publicado sólo en `127.0.0.1`; `/health/ready` registra en el logger `app.salud` el **tipo** de falla de cada 503 (nunca el mensaje ni secretos); el motor se libera aunque el arranque falle después de crearlo; los tests con base se saltean si la base no responde.
 **Pendiente (sugerencias no bloqueantes, para cuando toque esos archivos)**: `url_base_datos` aparece en `Settings.model_dump()` con la contraseña (no serializar ni loguear `settings`); `pg_isready` del healthcheck sin `-h 127.0.0.1`; la sonda de preparación comparte el pool de la app; `ProxyTCP` de los tests no cierra el lado cliente si falla la conexión a la base.
+
+### DD-36 — El seed limpia con `TRUNCATE`, no con `DELETE` (EJ-2)
+**Decisión**: `seed.py` vacía las tablas con `TRUNCATE TABLE ... RESTART IDENTITY CASCADE` (en orden inverso a las dependencias) antes de recargar.
+**Contexto**: los disparadores de sólo agregado (RN-15) son `BEFORE UPDATE OR DELETE ... FOR EACH ROW`; un `DELETE` normal sobre `historial_estado_orden`, `movimiento_stock` o `historial_precio_repuesto` los dispara y la segunda corrida del seed fallaba.
+**Justificación**: `TRUNCATE` es a nivel de sentencia y no dispara triggers `FOR EACH ROW`, así que el seed puede recargar las tablas de auditoría sin desinstalar el disparador (que además es la garantía que la consigna pide en runtime). `RESTART IDENTITY` deja los ids del seed predecibles (orden 1, orden 2, repuestos 1..4).
+**Trade-offs aceptados**: `TRUNCATE` necesita privilegios de owner; acá corre con el mismo rol que creó las tablas.
+
+### DD-37 — Las migraciones de EJ-2 van en dos revisiones encadenadas (EJ-2)
+**Decisión**: `f8513bf4e6fc` (autogenerada: las 13 tablas) y `a1b2c3d4e5f6` (escrita a mano: `solo_agregado()` + los tres `trg_<tabla>_solo_agregado`). `alembic.ini` no lleva `sqlalchemy.url`; `migrations/env.py` arma la URL desde `cargar_settings().url_base_datos` e importa los modelos de los 4 módulos.
+**Justificación**: Alembic no compara funciones ni triggers, así que el autogenerate no los ve; separarlos deja el diff de la migración 2 minimalista y revisable a mano (A-3). El test de migraciones corre los comandos de Alembic en un hilo (`asyncio.to_thread` + `ThreadPoolExecutor`) porque `env.py` llama `asyncio.run`.
+**Trade-offs aceptados**: dos migraciones que suben y bajan juntas; el `downgrade` de la 1 debe ir después del de la 2 (orden inverso, automático en Alembic).
 
 ## Supuestos inferidos
 
