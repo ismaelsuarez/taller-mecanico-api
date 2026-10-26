@@ -183,6 +183,22 @@
 **Justificación**: Alembic no compara funciones ni triggers, así que el autogenerate no los ve; separarlos deja el diff de la migración 2 minimalista y revisable a mano (A-3). El test de migraciones corre los comandos de Alembic en un hilo (`asyncio.to_thread` + `ThreadPoolExecutor`) porque `env.py` llama `asyncio.run`.
 **Trade-offs aceptados**: dos migraciones que suben y bajan juntas; el `downgrade` de la 1 debe ir después del de la 2 (orden inverso, automático en Alembic).
 
+### DD-38 — El seed sincroniza las secuencias después de insertar ids explícitos (EJ-3)
+**Decisión**: al final de `_cargar`, `seed.py` hace `setval` de las secuencias de `usuario`, `cliente`, `vehiculo`, `repuesto` y `orden_trabajo` hasta `max(id)` de cada tabla (en la misma transacción del seed).
+**Contexto**: `TRUNCATE ... RESTART IDENTITY` (DD-36) deja cada secuencia en 1 con `is_called = false` y los INSERT del seed llevan ids explícitos, que no la avanzan. Lo descubrió el primer bloque de `test/clientes_vehiculos.http`: el primer `POST /clientes` intentaba `id = 1`, chocaba con la clave primaria sembrada y la traducción de `IntegrityError` devolvía un 409 engañoso («Ya existe un cliente con ese documento.») en lugar de 201.
+**Justificación**: sin este paso, después de correr `seed.py` **ninguna** alta de la API funcionaba (rompía C-02, C-10 y C-19); es idempotente porque corre después de cada `TRUNCATE`.
+**Trade-offs aceptados**: la lista de tablas es fija en el código; si un día otra tabla recibe ids explícitos en el seed hay que agregarla (el comentario del paso 11 lo advierte). Las tablas con ids implícitos no la necesitan: sus propios INSERT ya dejan la secuencia en su lugar.
+
+### DD-39 — Las excepciones de dominio las traduce la aplicación, no cada router (EJ-3)
+**Decisión**: `app/core/errores.py` define `ErrorDeDominio` con `NoEncontrado` (→ 404) y `EnConflicto` (→ 409); los servicios las lanzan sin conocer FastAPI y `main.py` llama `registrar_traductores(app)` una sola vez.
+**Contexto**: D8 pide separar el dominio del HTTP; RN-18/S-9 exigen mensaje propio en español y que ninguna entrada inválida termine en 500.
+**Justificación**: un solo punto de traducción para los 13 endpoints (los routers no repiten `try/except`) y los servicios siguen siendo testables sin HTTP. Los mensajes salen de `str(error)`: nunca texto de la base.
+
+### DD-40 — Los query params de un listado van como campos del modelo `Query` (EJ-3)
+**Decisión**: cada listado subclasea `ParametrosPagina` (p. ej. `ParametrosRepuestos`, que agrega `q`) en vez de declarar el filtro como parámetro suelto del handler.
+**Contexto**: con FastAPI 0.162, si un handler declara `params: Annotated[Modelo, Query()]`, **todos** los query de la petición se validan contra ese modelo; con `extra="forbid"` un `q` declarado aparte cae como «extra» y responde 422 «Extra inputs are not permitted» en lugar de filtrar.
+**Justificación**: conserva `extra="forbid"` en los contratos de entrada también en query (S-4) y evita el 422 falso. Ojo al repetirlo en EJ-6: `GET /ordenes` con filtros usa el mismo patrón.
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

@@ -249,6 +249,22 @@ async def _cargar(sesion, hashes: dict[str, str]) -> None:
         {"cuando": AHORA},
     )
 
+    # 11. Secuencias: `TRUNCATE ... RESTART IDENTITY` dejó cada secuencia en 1 y
+    # los ids del seed son explícitos, así que no la avanzan. Sin este paso el
+    # primer alta de la API insertaría id=1 y chocaría con un id ya sembrado
+    # (DD-38). Sólo estas tablas reciben ids explícitos acá; el resto se llenó
+    # con ids implícitos, que ya dejaron la secuencia en su lugar.
+    for tabla in ("usuario", "cliente", "vehiculo", "repuesto", "orden_trabajo"):
+        # `tabla` sale de esta lista fija del código, nunca de datos externos.
+        await sesion.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence(:tabla, 'id'), "
+                "COALESCE((SELECT max(id) FROM " + tabla + "), 1), "
+                "EXISTS (SELECT 1 FROM " + tabla + "))"
+            ),
+            {"tabla": tabla},
+        )
+
 
 async def sembrar() -> None:
     settings = _settings()

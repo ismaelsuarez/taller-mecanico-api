@@ -177,7 +177,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 3 — API de recursos
 
 ### [EJ-3] `03-contratos-crud`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado (2026-10-26)
 - **Ejercicio / puntos**: Ejercicio 3 — 10 pts (10 %)
 - **Scope**:
   - `schemas.py` por módulo con contratos de entrada **separados** de los modelos de tabla, `extra="forbid"` (nadie edita el stock por PATCH → 422) y contratos de salida sin `password_hash`; PATCH con `exclude_unset`.

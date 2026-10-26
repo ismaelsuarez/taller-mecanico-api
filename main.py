@@ -8,8 +8,11 @@ from fastapi import APIRouter, FastAPI
 
 from app.core.config import obtener_settings
 from app.core.database import crear_fabrica_sesiones, crear_motor
+from app.core.errores import registrar_traductores
 from app.core.security import configurar_semaforo_bcrypt, hashear_password
+from app.modules.clientes.router import router as router_clientes
 from app.modules.health.router import router as router_salud
+from app.modules.repuestos.router import router as router_repuestos
 
 
 @asynccontextmanager
@@ -32,9 +35,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Taller Mecánico API", lifespan=lifespan)
+# Excepciones de dominio → 404/409 con mensaje propio (D8, RN-18).
+registrar_traductores(app)
 
-# Grupo abierto: salud y, desde EJ-4, /auth. El grupo protegido llega en EJ-5.
+# Grupo abierto: salud, clientes, vehículos y repuestos y, desde EJ-4, /auth.
+# El grupo protegido llega en EJ-5 (T-11).
 rutas_abiertas = APIRouter()
 rutas_abiertas.include_router(router_salud)
+rutas_abiertas.include_router(router_clientes)
+rutas_abiertas.include_router(router_repuestos)
 
 app.include_router(rutas_abiertas)

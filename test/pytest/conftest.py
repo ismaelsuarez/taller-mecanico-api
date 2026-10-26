@@ -73,3 +73,74 @@ def requiere_base_de_test() -> None:
         socket.create_connection((host, puerto), timeout=1).close()
     except OSError:
         pytest.skip(f"La base de test no responde en {host}:{puerto}: levantala con docker compose up -d db")
+
+
+CATALOGO_ESTADOS = [
+    ("PENDIENTE", "Esperando ser tomada por un mecánico", 1, False),
+    ("EN_REPARACION", "En curso de reparación", 2, False),
+    ("TERMINADA", "Reparación terminada", 3, True),
+    ("CANCELADA", "Orden cancelada", 4, True),
+]
+
+
+@pytest.fixture
+async def api(configurar_entorno):
+    """Esquema de test (catálogo de estados + admin sembrados) con la aplicación levantada.
+
+    Andamio de test (A-3): el esquema lo crea el metadata de SQLModel, no Alembic;
+    en producción lo crean las migraciones y lo puebla `seed.py` (A-5). Devuelve
+    `(cliente_http, motor)` para que los tests consulten la base directamente.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlmodel import SQLModel
+
+    # Importar todos los modelos para que estén en el metadata compartido (FKs).
+    from app.modules.clientes.models import Cliente, Vehiculo  # noqa: F401
+    from app.modules.ordenes.models import (  # noqa: F401
+        EstadoOrden,
+        HistorialEstadoOrden,
+        ItemOrden,
+        OrdenTrabajo,
+    )
+    from app.modules.repuestos.models import (  # noqa: F401
+        HistorialPrecio,
+        MovimientoStock,
+        Repuesto,
+    )
+    from app.modules.usuarios.models import (  # noqa: F401
+        AsignacionRol,
+        EventoSeguridad,
+        IntentoAcceso,
+        Usuario,
+    )
+
+    requiere_base_de_test()
+    configurar_entorno()
+
+    motor = create_async_engine(obtener_settings().url_base_datos)
+    async with motor.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
+        for codigo, descripcion, posicion, es_final in CATALOGO_ESTADOS:
+            await conn.execute(
+                text(
+                    "INSERT INTO estado_orden (codigo, descripcion, posicion, es_final) "
+                    "VALUES (:c, :d, :p, :f)"
+                ),
+                {"c": codigo, "d": descripcion, "p": posicion, "f": es_final},
+            )
+        # El admin lo usa `actor_temporal` (T-4); en producción lo crea seed.py.
+        await conn.execute(
+            text(
+                "INSERT INTO usuario (id, email, nombre, password_hash, activo, debe_cambiar_password) "
+                "VALUES (1, 'admin@example.com', 'Administrador Uno', 'hash-de-test', true, false)"
+            )
+        )
+
+    async with aplicacion_iniciada() as app, cliente_http(app) as cliente:
+        yield cliente, motor
+
+    async with motor.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+    await motor.dispose()
