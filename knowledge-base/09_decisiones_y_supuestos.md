@@ -165,6 +165,7 @@
 - La fixture `configurar_entorno` fuerza `JWT_SECRET` de test, apunta `POSTGRES_DB` a `POSTGRES_TEST_DB` (nunca a la base de desarrollo) y baja `BCRYPT_ROUNDS` a 4 para que los tests sean rápidos.
 - `aplicacion_iniciada()` corre el lifespan real (httpx `ASGITransport` no lo dispara solo); `cliente_http(app)` da el cliente.
 - Para simular caídas de la base se usa un puerto sin servicio o el `ProxyTCP` de `test_salud.py`; no hace falta detener Docker.
+- Las fixtures de integración preparan el esquema con Alembic hasta `head`, incluidos los disparadores; no usan `create_all` (DD-43).
 - Cierre de cada change: `pytest -rs` con `db` levantada y **0 skipped**.
 **Contexto**: el venv del proyecto es Python 3.12 (`uv venv --python 3.12`); quedó instalado bcrypt 5, que **lanza una excepción con contraseñas de más de 72 bytes** (lo valida el contrato en EJ-4).
 
@@ -198,6 +199,23 @@
 **Decisión**: cada listado subclasea `ParametrosPagina` (p. ej. `ParametrosRepuestos`, que agrega `q`) en vez de declarar el filtro como parámetro suelto del handler.
 **Contexto**: con FastAPI 0.162, si un handler declara `params: Annotated[Modelo, Query()]`, **todos** los query de la petición se validan contra ese modelo; con `extra="forbid"` un `q` declarado aparte cae como «extra» y responde 422 «Extra inputs are not permitted» en lugar de filtrar.
 **Justificación**: conserva `extra="forbid"` en los contratos de entrada también en query (S-4) y evita el 422 falso. Ojo al repetirlo en EJ-6: `GET /ordenes` con filtros usa el mismo patrón.
+
+### DD-41 — Límites numéricos coherentes con PostgreSQL (auditoría EJ-1..3)
+**Decisión**: precios positivos finitos, representables exactamente en `NUMERIC(10,2)` (0.01..99999999.99), sin redondeo silencioso; ceros finales equivalentes admitidos. Stock inicial 0..2147483647 y reposición 1..2147483647.
+**Justificación**: RN-18 exige rechazar entradas incompatibles con 422 antes de persistir. Si una cantidad válida sumada al stock existente supera el límite, corresponde 409 por conflicto con lo guardado, sin modificar stock ni movimientos (RT-PG-04).
+
+### DD-42 — Validación HTTP humana sin eco de entrada (auditoría EJ-1..3)
+**Decisión**: `RequestValidationError` se traduce centralmente a `{"detail": [{"msg": "mensaje humano"}]}`. Se usan etiquetas conocidas en español; lo desconocido recibe un mensaje genérico seguro. No se devuelven entrada, ubicaciones técnicas, categorías del validador ni contexto interno. OpenAPI describe el nuevo formato y el `detail` textual que conserva la paginación.
+**Justificación**: DD-25/S-9. Se conservan sin cambios los 404/409 de dominio y el 422 de página inexistente. Evitar el eco también impide que futuras validaciones de autenticación devuelvan contraseñas.
+
+### DD-43 — Fixtures de integración con las migraciones reales (auditoría EJ-1..3)
+**Decisión**: las fixtures de API, modelos y repositorios crean su esquema con Alembic hasta `head`, no con `create_all`. Incluyen los tres disparadores de sólo agregado. Se ejecutan únicamente en bases de test reconstruibles y separadas de desarrollo.
+**Justificación**: A-3 rige también para las pruebas; un esquema creado desde el metadata no instala la segunda migración y permite que pruebas verdes oculten diferencias con el entorno real.
+**Integración**: Alembic respeta los handlers de logging del llamador; sólo configura `alembic.ini` cuando no hay handlers y no deshabilita loggers existentes. El comportamiento anterior también rompía la captura de salud en una secuencia original de migraciones; quedan cubiertos la captura del 503 y los diagnósticos CLI.
+
+### DD-44 — El seed usa el Unit of Work existente (auditoría EJ-1..3)
+**Decisión**: el proceso del seed crea/cierra la sesión y abre el UoW existente para vaciar y recargar en una única transacción. El hash permanece antes de la transacción. No hay confirmación externa mediante `conexion.begin()`.
+**Justificación**: B-8/DD-19 exige que toda confirmación pase por UoW. Se mantiene la atomicidad e idempotencia ya exigidas; un fallo de recarga revierte también el vaciado.
 
 ## Supuestos inferidos
 
