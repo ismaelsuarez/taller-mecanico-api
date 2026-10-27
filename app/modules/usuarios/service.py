@@ -15,6 +15,7 @@ from app.modules.usuarios.models import (
     Usuario,
 )
 from app.modules.usuarios.schemas import (
+    CambioPasswordEntrada,
     IdentidadLectura,
     LoginEntrada,
     RegistroEntrada,
@@ -44,6 +45,43 @@ async def obtener_identidad(
         )
     assert identidad is not None
     return identidad
+
+
+async def cambiar_password(
+    uow: UnitOfWorkUsuario, usuario_id: int, datos: CambioPasswordEntrada, rondas: int,
+) -> tuple[datetime, list[str]]:
+    usuario = None
+    password_hash = None
+    async with uow:
+        usuario = await uow.usuarios.get_by_id(usuario_id)
+        if usuario is None or not usuario.activo:
+            raise NoAutenticado("La sesión no es válida. Volvé a iniciar sesión.")
+        password_hash = usuario.password_hash
+    # Conservar sólo el hash primitivo; ninguna entidad/relación ni conexión durante bcrypt.
+    del usuario
+    assert password_hash is not None
+    if not await security.verificar_password(datos.password_actual, password_hash):
+        raise NoAutenticado("La contraseña actual no es correcta.")
+    nuevo_hash = await security.hashear_password(datos.password_nueva, rondas)
+    cambio = None
+    roles: list[str] = []
+    async with uow:
+        usuario = await uow.usuarios.get_por_id_con_roles(usuario_id)
+        if usuario is None or not usuario.activo:
+            raise NoAutenticado("La sesión no es válida. Volvé a iniciar sesión.")
+        cambio = datetime.now(UTC)
+        usuario.password_hash = nuevo_hash
+        usuario.password_cambiada_en = cambio
+        usuario.debe_cambiar_password = False
+        await uow.usuarios.update(usuario)
+        await uow.eventos.add(EventoSeguridad(
+            cuando=cambio, actor=usuario.email, accion="Cambio de contraseña",
+        ))
+        roles = [rol.rol for rol in usuario.roles
+                 if rol.revocada_en is None and (rol.vence_en is None or rol.vence_en > cambio)]
+    # La marca persistida conserva microsegundos y sólo se devuelve tras confirmar.
+    assert cambio is not None
+    return cambio, roles
 
 
 async def registrar_usuario(

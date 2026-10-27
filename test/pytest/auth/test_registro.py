@@ -178,7 +178,7 @@ async def test_422_sin_bcrypt_cookie_eco_ni_escrituras(
 async def test_openapi_publica_registro_y_login(api_auth):
     documento = (await api_auth.get("/openapi.json")).json()
     assert {ruta for ruta in documento["paths"] if ruta.startswith("/auth")} == {
-        "/auth/registro", "/auth/login", "/auth/yo", "/auth/logout",
+        "/auth/registro", "/auth/login", "/auth/yo", "/auth/logout", "/auth/cambiar-password",
     }
     operacion = documento["paths"]["/auth/registro"]["post"]
     assert set(operacion["responses"]) == {"201", "409", "422"}

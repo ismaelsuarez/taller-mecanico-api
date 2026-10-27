@@ -36,9 +36,9 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 
 ## 6. Cambio de contraseña y renovación de sesión
 
-- [ ] 6.1 Implementar comprobación actual y cálculo del hash nuevo fuera de transacciones, seguidos de actualización atómica de hash/timestamp/bandera/evento; observar RED/GREEN de actual incorrecta 401, límites 422 y rollback por fallo de commit sin cambios parciales ni cookie nueva.
-- [ ] 6.2 Emitir la cookie de reemplazo después de confirmar y aplicar comparación temporal sin truncamiento; probar vía HTTP login y cambio dentro del mismo segundo: cookie vieja 401, nueva 200 en yo, contraseña vieja inválida, bandera limpia y evento con actor correcto.
-- [ ] 6.3 Agregar C-09 parcial a `test/auth.http` y documentar cuerpos D1, nueva cookie e invalidación inmediata; verificar ejecución con cambio pendiente y dejar explícito que el bloqueo global 403 corresponde a EJ-5.
+- [x] 6.1 Implementar comprobación actual y cálculo del hash nuevo fuera de transacciones, seguidos de actualización atómica de hash/timestamp/bandera/evento; observar RED/GREEN de actual incorrecta 401, límites 422 y rollback por fallo de commit sin cambios parciales ni cookie nueva.
+- [x] 6.2 Emitir la cookie de reemplazo después de confirmar y aplicar comparación temporal sin truncamiento; probar vía HTTP login y cambio dentro del mismo segundo: cookie vieja 401, nueva 200 en yo, contraseña vieja inválida, bandera limpia y evento con actor correcto.
+- [x] 6.3 Agregar C-09 parcial a `test/auth.http` y documentar cuerpos D1, nueva cookie e invalidación inmediata; verificar ejecución con cambio pendiente y dejar explícito que el bloqueo global 403 corresponde a EJ-5.
 
 ## 7. Verificación integrada y preparación del relevo
 

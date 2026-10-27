@@ -1,6 +1,7 @@
 """Registro/login públicos; cookie sólo después de las confirmaciones obligatorias."""
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -13,6 +14,7 @@ from app.core.errores import RespuestaAutenticacion
 from app.core.security import emitir_token
 from app.modules.usuarios import service
 from app.modules.usuarios.schemas import (
+    CambioPasswordEntrada,
     IdentidadLectura,
     LoginEntrada,
     MensajeLectura,
@@ -52,12 +54,33 @@ UowIntentosDep = Annotated[UnitOfWorkIntentoAcceso, Depends(construir_uow_intent
 
 def poner_cookie_sesion(
     respuesta: Response, usuario_id: int, roles: list[str], settings: Settings,
+    *, emitido_en: datetime | None = None,
 ) -> None:
     """Reutilizable por login/cambio: el llamador ya confirmó su operación."""
     respuesta.set_cookie(
-        "access_token", emitir_token(usuario_id, roles, settings),
+        "access_token", emitir_token(usuario_id, roles, settings, emitido_en=emitido_en),
         max_age=settings.access_token_expire_seconds, path="/",
         secure=settings.cookie_secure, httponly=True, samesite="lax",
+    )
+
+
+@router.post(
+    "/cambiar-password", summary="Cambiar contraseña y reemplazar la cookie tras confirmar",
+    responses={401: {"model": RespuestaAutenticacion,
+                     "description": "Sesión no válida o contraseña actual incorrecta"}},
+)
+async def cambiar_password(
+    datos: CambioPasswordEntrada, usuario: UsuarioActualDep, uow: UowUsuarioDep,
+    request: Request, response: Response,
+) -> SesionLectura:
+    settings = request.app.state.settings
+    cambio, roles = await service.cambiar_password(
+        uow, usuario.usuario.id, datos, settings.bcrypt_rounds,
+    )
+    poner_cookie_sesion(response, usuario.usuario.id, roles, settings, emitido_en=cambio)
+    return SesionLectura(
+        mensaje="Contraseña actualizada", debe_cambiar_password=False,
+        expira_en_segundos=settings.access_token_expire_seconds,
     )
 
 

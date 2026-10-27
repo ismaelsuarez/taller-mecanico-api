@@ -98,7 +98,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 ## Primitivas de autenticación (EJ-4 en curso)
 
-`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo` y `POST /auth/logout`**; el cambio de contraseña sigue pendiente. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
+`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo`, `POST /auth/logout` y `POST /auth/cambiar-password`**. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
 
 | Interfaz pública | Uso |
 |---|---|
@@ -108,7 +108,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 | `emitir_token(usuario_id: int, roles: list[str], settings: Settings, *, emitido_en: datetime \| None = None) -> str` | Firma `sub` textual, `iat` fraccional, `exp` y roles informativos; devuelve el token al llamador, nunca una respuesta HTTP. |
 | `verificar_token(token: str, settings: Settings) -> ClaimsSesion` | Verifica firma, algoritmo configurado, presencia/tipos y vigencia. Devuelve `{sub, iat, exp, roles}` sin truncar los tiempos. |
 
-Registro/login validan las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberan las transacciones durante ese trabajo; el futuro cambio de contraseña debe conservar ese límite. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
+Registro/login/cambio validan las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberan las transacciones durante ese trabajo. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
 
 JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura la emisión y eliminación de cookies, no estas primitivas.
 
@@ -158,6 +158,20 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 `test_identidad.py`/`test_logout.py` verifican HTTP ASGI y PostgreSQL/Alembic reales: claims, estado actual, frontera ±1 microsegundo, roles cambiados, eliminación y ausencia de escrituras. Focalizadas T5 + expectativa OpenAPI previa: **33 aprobadas, 0 omitidas**. La suite completa y la ejecución host solicitada por el verificador independiente dieron **563 aprobadas, 0 omitidas y 76 advertencias conocidas** de la clave JWT de fixture. Los **22 bloques TCP** pasaron tras Alembic/seed en bases aisladas. El diferencial contra `9cb3f16` conservó 15 solicitudes por versión a los tres consumidores de `actor_temporal`, con códigos, cuerpos, encabezados y efectos auditados equivalentes. Sólo normaliza fechas previamente validadas; compara stderr bajo el mismo formato sin frames de traceback. El dictamen independiente cubre T5, no cambio de contraseña, EJ-5 ni cierre global de EJ-4.
 
 `test/auth.http` agrega C-01/C-03 y yo/logout (22 bloques en total), conservando C-02/C-04/C-05. Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
+
+### Cambio de contraseña (OPSX 6.1–6.3)
+
+`POST /auth/cambiar-password` exige la cookie de sesión existente, también si hay cambio pendiente. Recibe `{password_actual,password_nueva}`, ambos de texto y hasta 72 bytes UTF-8, sin extras. No añade complejidad ni normalización.
+
+- **200**: `{"mensaje":"Contraseña actualizada","debe_cambiar_password":false,"expira_en_segundos":1800}`; duración configurada, nunca token/hash en JSON.
+- **401**: contraseña actual incorrecta → `{"detail":"La contraseña actual no es correcta."}`; sesión ausente/inválida/vencida/revocada o usuario inactivo → mensaje de identidad existente.
+- **422**: validación humana sin eco, bcrypt ni escrituras. OpenAPI publica 200/401/422.
+
+La lectura termina antes de verificar/calcular bcrypt (hilo y semáforo existentes). Hash, fecha UTC con microsegundos, bandera falsa y evento «Cambio de contraseña» con el correo del usuario se confirman en un único UoW. Fallar una escritura/commit revierte todo, sin llamar al emisor de cookie. Sólo después se entrega `access_token` de reemplazo con los atributos habituales, roles vigentes e `iat` igual a la fecha persistida: la cookie anterior deja de valer inmediatamente, incluso dentro del mismo segundo. No hay locks/CAS ni garantías nuevas de concurrencia.
+
+**Evidencia funcional:** RED HTTP 404 del implementador; verificación final focalizada de cambio + registro: 45 aprobadas sin omisiones, incluidas las aserciones de rollback. La ejecución host preparada por el verificador independiente aprobó **595 pruebas, 0 omitidas y 132 advertencias conocidas de clave JWT de fixture**, más los **28 bloques TCP** sobre PostgreSQL migrada/seed aislados. El diferencial contra `c36b50e` aprobó 48 solicitudes por versión a registro/login, con Secure activado/desactivado y comparación de exit/stdout/stderr; sólo normaliza sales bcrypt verificadas, fechas conscientes de zona y JWT/tiempos previamente validados. El dictamen independiente aprueba 6.1–6.3, sin atribuirle el RED histórico ni una revisión nativa.
+
+**C-09 parcial ejecutado por TCP:** `test/auth.http` conserva los 22 bloques anteriores y agrega seis (28 total). Definí `PASSWORD_PENDIENTE` con la contraseña de `nuevo@example.com` del seed y `PASSWORD_NUEVA` distinta, efímera y de hasta 72 bytes; nunca las guardes en el archivo. Usa una cuenta distinta de la bloqueada por C-05, cookies nombradas y sin cookie jar. Al terminar se esperan 12 intentos (9 fallidos/3 exitosos) y cuatro eventos incluido seed. El bloqueo global **403**, RBAC y protección del CRUD siguen siendo **EJ-5**, no parte de esta prueba.
 
 ## Endpoints
 

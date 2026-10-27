@@ -8,6 +8,10 @@
 # Para C-03 Bearer: copiar sólo el valor JWT de loginCliente a TOKEN_SOLO_BEARER
 # en el entorno local del cliente HTTP; no guardarlo en este archivo.
 @tokenSoloBearer = {{$processEnv TOKEN_SOLO_BEARER}}
+# C-09: contraseña del usuario pendiente del seed, provista por el entorno;
+# PASSWORD_NUEVA debe ser distinta, efímera y de hasta 72 bytes UTF-8.
+@passwordPendiente = {{$processEnv PASSWORD_PENDIENTE}}
+@passwordNueva = {{$processEnv PASSWORD_NUEVA}}
 
 ### C-02 — Registro atómico, correo/documento repetidos
 # @name registroCliente
@@ -136,7 +140,7 @@ Cookie: {{loginCliente.response.headers.Set-Cookie}}
 # Esperado: 429 {"detail":"Demasiados intentos. Volvé a intentar más tarde."}
 # Retry-After positivo; sin Set-Cookie; agrega exito=false y evento
 # «Login bloqueado por demasiados intentos», actor registro-http@example.com.
-# Total del archivo: nueve intentos (ocho fallidos, uno exitoso), sin borrar C-04.
+# Hasta este bloque: nueve intentos (ocho fallidos, uno exitoso), sin borrar C-04.
 # Los 429 también cuentan: Retry-After no garantiza acceso si hubo nuevos fallos.
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
@@ -213,3 +217,66 @@ Cookie: access_token=sesion-invalida
 # Esperado: 200, mismo cuerpo de yoCliente mientras no venza ni cambie la contraseña.
 GET {{baseUrl}}/auth/yo
 Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-09 parcial — Login del usuario pendiente (distinto del bloqueado por C-05)
+# @name loginPendiente
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Sesión iniciada","debe_cambiar_password":true,"expira_en_segundos":1800}
+# Duración configurable; Set-Cookie con los atributos de C-03, un intento exitoso.
+# El bloqueo global 403 queda para EJ-5; no se demuestra ni implementa aquí.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"nuevo@example.com","password":"{{passwordPendiente}}"}
+
+### C-09 parcial — Cambio permitido con bandera pendiente
+# @name cambioPassword
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Contraseña actualizada","debe_cambiar_password":false,"expira_en_segundos":1800}
+# Cookie de reemplazo sólo tras commit; mismos atributos/duración que login.
+# Base: hash nuevo, password_cambiada_en con fracción, bandera false y evento
+# «Cambio de contraseña», actor nuevo@example.com, todo en una transacción.
+# Sin esperas artificiales: test_cambiar_password.py controla el reloj para
+# probar determinísticamente login/cambio dentro del mismo segundo.
+POST {{baseUrl}}/auth/cambiar-password
+Content-Type: application/json
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+{"password_actual":"{{passwordPendiente}}","password_nueva":"{{passwordNueva}}"}
+
+### C-09 parcial — Cookie anterior inválida inmediatamente
+# @name yoAnterior
+# @no-cookie-jar
+# Esperado: 401 {"detail":"La sesión no es válida. Volvé a iniciar sesión."}
+# Sin Set-Cookie ni escrituras; no esperar un segundo.
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+### C-09 parcial — Cookie nueva válida
+# @name yoNueva
+# @no-cookie-jar
+# Esperado: 200; usuario nuevo@example.com con debe_cambiar_password:false;
+# roles_vigentes y roles_token ["MECANICO"]. Sin hash/token, Set-Cookie ni escrituras.
+GET {{baseUrl}}/auth/yo
+Cookie: {{cambioPassword.response.headers.Set-Cookie}}
+
+### C-09 parcial — La contraseña anterior ya no permite login
+# @name loginAnterior
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Un intento fallido, sin Set-Cookie ni evento nuevo.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"nuevo@example.com","password":"{{passwordPendiente}}"}
+
+### C-09 parcial — Login con la contraseña nueva
+# @name loginNueva
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}
+# Cookie válida; un intento exitoso. Total: 12 intentos (9 fallidos/3 exitosos),
+# cuatro eventos incluido seed (registro, bloqueo y cambio), sin borrar historial.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"nuevo@example.com","password":"{{passwordNueva}}"}
