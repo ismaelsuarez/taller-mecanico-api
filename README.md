@@ -96,6 +96,28 @@ Los datos inválidos responden **422** con mensajes en español, por ejemplo:
 
 La respuesta no repite los datos enviados ni incluye ubicaciones o códigos internos de validación. Los errores de dominio **404/409** conservan `{"detail": "mensaje"}`; una página inexistente también conserva ese formato textual con estado **422**. OpenAPI describe ambos formatos de 422.
 
+## Primitivas de autenticación (EJ-4 en curso)
+
+`app/core/security.py` ya ofrece los helpers de bcrypt y JWT. **Todavía no hay rutas `/auth`, cookies ni servicios de autenticación**; el CRUD y `actor_temporal` siguen abiertos hasta EJ-5.
+
+| Interfaz pública | Uso |
+|---|---|
+| `configurar_semaforo_bcrypt(max_concurrencia: int) -> None` | Inicialización del lifespan; el seed conserva su configuración independiente. No reconfigurar por petición. |
+| `async hashear_password(texto: str, rondas: int) -> str` | Genera sal y hash en un hilo, bajo el semáforo compartido. Firma existente conservada. |
+| `async verificar_password(texto: str, password_hash: str) -> bool` | Mismo trabajo bcrypt para el hash del usuario o `app.state.hash_ficticio`; no genera otro hash ficticio. |
+| `emitir_token(usuario_id: int, roles: list[str], settings: Settings, *, emitido_en: datetime \| None = None) -> str` | Firma `sub` textual, `iat` fraccional, `exp` y roles informativos; devuelve el token al llamador, nunca una respuesta HTTP. |
+| `verificar_token(token: str, settings: Settings) -> ClaimsSesion` | Verifica firma, algoritmo configurado, presencia/tipos y vigencia. Devuelve `{sub, iat, exp, roles}` sin truncar los tiempos. |
+
+Los futuros servicios deben validar las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberar las transacciones durante ese trabajo. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
+
+JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` queda disponible para las rutas futuras, no interviene en estas primitivas.
+
+`TokenInvalido` rechaza tokens con firma/claims inválidos o vencidos con un mensaje humano. `sub` identifica al usuario como entero positivo textual; `roles` es una lista de textos, no una autorización. `iat` y `exp` deben ser números finitos (no cadenas ni booleanos); se comparan sin convertirlos a enteros. No se exige issuer ni audience.
+
+Emitir sólo **después del commit**. `emitido_en` admite fechas con zona horaria (por defecto, ahora UTC) y debe ser igual o posterior al cambio de contraseña persistido. La futura dependencia comparará `claims["iat"] < password_cambiada_en.timestamp()` sin truncar y comprobará usuario activo/roles actuales: **esas comprobaciones de base y la revocación HTTP todavía no están implementadas**. El token sólo deberá transportarse en `access_token`, nunca en JSON ni en `Authorization`.
+
+Pruebas focalizadas: `test/pytest/auth/test_bcrypt.py` y `test_jwt.py`, con bcrypt/PyJWT reales, límite concurrente, salud disponible y reloj controlado para instantes dentro del mismo segundo.
+
 ## Endpoints
 
 > **Rutas abiertas hasta EJ-5 (T-11):** todavía no hay login; desde EJ-4 se suma `/auth` y desde EJ-5 estos grupos quedan protegidos por roles.

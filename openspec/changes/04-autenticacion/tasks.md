@@ -12,9 +12,9 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 
 ## 2. Primitivas de seguridad reutilizables
 
-- [ ] 2.1 Ampliar el helper bcrypt existente para verificar contraseñas reales/ficticias y ejecutar también `gensalt` dentro del trabajo protegido por semáforo/`to_thread`; observar RED/GREEN del límite de concurrencia y avance del bucle, conservando el uso del helper por seed y lifespan.
-- [ ] 2.2 Agregar emisión/verificación JWT con clave fija, algoritmo configurado, claims requeridos, `sub` textual e `iat` fraccional; verificar firmas/claims inválidos, vencimiento y preservación de dos instantes distintos dentro del mismo segundo, sin depender de truncamiento de la biblioteca.
-- [ ] 2.3 Documentar helpers y configuración reutilizada, sin secretos ni nuevas variables innecesarias; ejecutar regresiones focalizadas de configuración, lifespan, salud y seed, verificando sus comportamientos previos y la ausencia de recursos creados al importar.
+- [x] 2.1 Ampliar el helper bcrypt existente para verificar contraseñas reales/ficticias y ejecutar también `gensalt` dentro del trabajo protegido por semáforo/`to_thread`; observar RED/GREEN del límite de concurrencia y avance del bucle, conservando el uso del helper por seed y lifespan.
+- [x] 2.2 Agregar emisión/verificación JWT con clave fija, algoritmo configurado, claims requeridos, `sub` textual e `iat` fraccional; verificar firmas/claims inválidos, vencimiento y preservación de dos instantes distintos dentro del mismo segundo, sin depender de truncamiento de la biblioteca.
+- [x] 2.3 Documentar helpers y configuración reutilizada, sin secretos ni nuevas variables innecesarias; ejecutar regresiones focalizadas de configuración, lifespan, salud y seed, verificando sus comportamientos previos y la ausencia de recursos creados al importar.
 
 ## 3. Registro atómico y cookie posterior al commit
 
