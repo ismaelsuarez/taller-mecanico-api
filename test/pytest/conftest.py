@@ -5,6 +5,7 @@ Si no hay base de test, los tests que la necesitan se saltean con un motivo clar
 verificación de cierre de cada change exige correrlos con la base levantada (0 skipped).
 """
 
+import asyncio
 import os
 import socket
 from collections.abc import AsyncIterator
@@ -15,6 +16,7 @@ import pytest
 from dotenv import dotenv_values
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import obtener_settings
 
@@ -83,45 +85,67 @@ CATALOGO_ESTADOS = [
 ]
 
 
-@pytest.fixture
-async def api(configurar_entorno):
-    """Esquema de test (catálogo de estados + admin sembrados) con la aplicación levantada.
+@asynccontextmanager
+async def esquema_migrado_de_test() -> AsyncIterator[AsyncEngine]:
+    """Esquema aislado por test: Alembic real, incluidos los tres disparadores.
 
-    Andamio de test (A-3): el esquema lo crea el metadata de SQLModel, no Alembic;
-    en producción lo crean las migraciones y lo puebla `seed.py` (A-5). Devuelve
-    `(cliente_http, motor)` para que los tests consulten la base directamente.
+    Limpia también alembic_version antes y después: los tests de migraciones
+    pueden haber dejado otra revisión o eliminado public por completo.
     """
+    from alembic import command
+    from alembic.config import Config
     from sqlalchemy import text
+    from sqlalchemy.engine import make_url
     from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlmodel import SQLModel
-
-    # Importar todos los modelos para que estén en el metadata compartido (FKs).
-    from app.modules.clientes.models import Cliente, Vehiculo  # noqa: F401
-    from app.modules.ordenes.models import (  # noqa: F401
-        EstadoOrden,
-        HistorialEstadoOrden,
-        ItemOrden,
-        OrdenTrabajo,
-    )
-    from app.modules.repuestos.models import (  # noqa: F401
-        HistorialPrecio,
-        MovimientoStock,
-        Repuesto,
-    )
-    from app.modules.usuarios.models import (  # noqa: F401
-        AsignacionRol,
-        EventoSeguridad,
-        IntentoAcceso,
-        Usuario,
-    )
 
     requiere_base_de_test()
-    configurar_entorno()
+    url = obtener_settings().url_base_datos
+    if make_url(url).database != leer_variable("POSTGRES_TEST_DB"):
+        raise RuntimeError("La limpieza sólo puede ejecutarse sobre POSTGRES_TEST_DB.")
+    motor = create_async_engine(url)
 
-    motor = create_async_engine(obtener_settings().url_base_datos)
+    async def limpiar() -> None:
+        async with motor.begin() as conn:
+            await conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+
+    def migrar() -> None:
+        cfg = Config(str(RAIZ / "alembic.ini"))
+        cfg.set_main_option("script_location", str(RAIZ / "migrations"))
+        command.upgrade(cfg, "head")
+
+    try:
+        await limpiar()
+        # env.py usa asyncio.run: necesita su propio bucle, fuera del de pytest.
+        await asyncio.to_thread(migrar)
+        yield motor
+    finally:
+        try:
+            await limpiar()
+        finally:
+            await motor.dispose()
+
+
+@pytest.fixture
+async def base_migrada(configurar_entorno):
+    """Motor de PostgreSQL con esquema vacío migrado a head, nunca metadata."""
+    requiere_base_de_test()
+    configurar_entorno()
+    async with esquema_migrado_de_test() as motor:
+        yield motor
+
+
+@pytest.fixture
+async def api(base_migrada):
+    """Aplicación con esquema Alembic real y catálogo + admin sembrados.
+
+    Devuelve `(cliente_http, motor)`; la fixture base_migrada limpia al salir,
+    incluso si falla la preparación de datos o el lifespan.
+    """
+    from sqlalchemy import text
+
+    motor = base_migrada
     async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-        await conn.run_sync(SQLModel.metadata.create_all)
         for codigo, descripcion, posicion, es_final in CATALOGO_ESTADOS:
             await conn.execute(
                 text(
@@ -140,7 +164,3 @@ async def api(configurar_entorno):
 
     async with aplicacion_iniciada() as app, cliente_http(app) as cliente:
         yield cliente, motor
-
-    async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-    await motor.dispose()

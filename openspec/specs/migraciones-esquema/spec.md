@@ -7,15 +7,23 @@ Garantiza que el esquema de la base se cree y modifique exclusivamente con Alemb
 
 ### Requirement: Esquema creado sólo con Alembic
 
-El esquema MUST crearse únicamente mediante migraciones de Alembic. MUST NO usarse `create_all` en ningún punto del ciclo de vida de la aplicación ni del seed. La plantilla de Alembic MUST ser la asincrónica.
+El esquema MUST crearse únicamente mediante migraciones de Alembic, también en las fixtures de integración de modelos, repositorios y API. MUST NO usarse `create_all` en la aplicación, el seed ni esas fixtures. La plantilla de Alembic MUST ser la asincrónica.
 
 #### Scenario: create_all no se usa
-- **WHEN** se busca en el código de la aplicación y del seed la llamada a `create_all`
+- **WHEN** se busca en el código de la aplicación, del seed y de las fixtures de integración una llamada a `create_all`
 - **THEN** no hay resultados
+
+#### Scenario: Integración con el esquema real
+- **WHEN** se prepara una fixture PostgreSQL para modelos, repositorios o API
+- **THEN** se aplican las migraciones hasta `head`, incluidos los tres disparadores de sólo agregado, sobre una base de test separada de desarrollo
 
 #### Scenario: Plantilla asincrónica
 - **WHEN** se revisa la configuración de Alembic (`migrations/env.py`)
 - **THEN** usa el patrón asincrónico (motor y conexión asíncronos)
+
+#### Scenario: Migraciones sin interferencia con los registros del llamador
+- **WHEN** Alembic se ejecuta dentro de un proceso que ya configuró sus handlers
+- **THEN** conserva esos handlers y no deshabilita los loggers existentes; la CLI en un proceso sin configuración conserva los diagnósticos de `alembic.ini`
 
 ### Requirement: Migración inicial con todas las tablas
 

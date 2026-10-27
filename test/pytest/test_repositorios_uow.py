@@ -3,64 +3,24 @@
 `BaseRepository[T]` y `SoftDeleteRepository[T]` hacen `flush()` y nunca `commit()`;
 el `UnitOfWork` confirma al salir del bloque, revierte si sale con excepción y no
 cierra la sesión. Contra la PostgreSQL real de test, con el esquema creado por
-metadata (andamio de test, regla A-3).
+las migraciones de Alembic (regla A-3).
 """
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlmodel import SQLModel
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-# Importar todos los modelos para que estén registrados en el metadata de la app.
-from app.modules.clientes.models import Cliente, Vehiculo  # noqa: F401
-from app.modules.ordenes.models import (  # noqa: F401
-    EstadoOrden,
-    HistorialEstadoOrden,
-    ItemOrden,
-    OrdenTrabajo,
-)
-from app.modules.repuestos.models import (  # noqa: F401
-    HistorialPrecio,
-    MovimientoStock,
-    Repuesto,
-)
-from app.modules.usuarios.models import (  # noqa: F401
-    AsignacionRol,
-    EventoSeguridad,
-    IntentoAcceso,
-    Usuario,
-)
 from app.core.repository import BaseRepository, SoftDeleteRepository
 from app.core.unit_of_work import UnitOfWork
+from app.modules.clientes.models import Cliente, Vehiculo
 from app.modules.clientes.unit_of_work import UnitOfWorkCliente
 from app.modules.repuestos.unit_of_work import UnitOfWorkRepuesto
 
-from conftest import configurar_entorno, requiere_base_de_test
-
-
-def _url_test() -> str:
-    from app.core.config import cargar_settings
-
-    return cargar_settings().url_base_datos
-
 
 @pytest.fixture
-async def fabrica_de_sesiones(configurar_entorno):
-    """Esquema de test + fábrica de sesiones; borra todo al terminar."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    requiere_base_de_test()
-    configurar_entorno()
-
-    motor = create_async_engine(_url_test())
-    async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-        await conn.run_sync(SQLModel.metadata.create_all)
-
-    yield async_sessionmaker(motor, expire_on_commit=False)
-
-    async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-    await motor.dispose()
+async def fabrica_de_sesiones(base_migrada):
+    """Fábrica sobre el esquema real de Alembic, aislado por test."""
+    yield async_sessionmaker(base_migrada, expire_on_commit=False)
 
 
 async def _contar(sesion, modelo) -> int:

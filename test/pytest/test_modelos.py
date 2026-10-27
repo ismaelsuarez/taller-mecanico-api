@@ -2,9 +2,8 @@
 
 La primera parte lee el metadata de SQLAlchemy de la aplicación (sin tocar la base).
 La segunda parte (`TestComportamientoEnBase`) verifica contra la PostgreSQL real de test
-que los índices, UNIQUE y CHECK se comportan como exige la consigna. Para eso crea el
-esquema con el metadata de los modelos: es un andamio de **test**; la aplicación y el
-seed **nunca** usan `create_all` (regla A-3) — el esquema productivo lo crea Alembic.
+que los índices, UNIQUE y CHECK se comportan como exige la consigna sobre el
+esquema creado por Alembic, incluidos los disparadores de la segunda migración (A-3).
 """
 
 from datetime import datetime, timezone
@@ -33,8 +32,6 @@ from app.modules.usuarios.models import (  # noqa: F401
     IntentoAcceso,
     Usuario,
 )
-
-from conftest import configurar_entorno, leer_variable, requiere_base_de_test
 
 TABLAS_ESPERADAS = {
     "usuario",
@@ -292,29 +289,10 @@ class TestDecimalEnPython:
 # Comportamiento contra la base de test real (1.3 / 1.4)
 # ---------------------------------------------------------------------------
 
-from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
-
-
 @pytest.fixture
-async def esquema_de_test(configurar_entorno):
-    """Crea el esquema en la base de test y lo elimina al terminar (andamio de test)."""
-    requiere_base_de_test()
-    configurar_entorno()
-
-    motor = create_async_engine(_url_test())
-    async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield motor
-    async with motor.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-    await motor.dispose()
-
-
-def _url_test() -> str:
-    from app.core.config import cargar_settings
-
-    return cargar_settings().url_base_datos
+async def esquema_de_test(base_migrada):
+    """Reutiliza el esquema real de Alembic, aislado por test."""
+    yield base_migrada
 
 
 async def _ejecutar(motor, consulta: str, **params):

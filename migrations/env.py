@@ -6,6 +6,7 @@ vea las 13 tablas.
 """
 
 import asyncio
+from logging import getLogger
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -23,8 +24,10 @@ from sqlmodel import SQLModel
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# En uso embebido, el llamador ya administra los handlers (incluida la captura).
+# La CLI sin logging configurado sigue usando alembic.ini.
+if config.config_file_name is not None and not getLogger().handlers:
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata
 
