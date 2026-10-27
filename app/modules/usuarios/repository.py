@@ -22,6 +22,17 @@ class UsuarioRepository(BaseRepository[Usuario]):
     def __init__(self, sesion: AsyncSession) -> None:
         super().__init__(sesion, Usuario)
 
+    async def get_por_id_con_roles(self, usuario_id: int) -> Usuario | None:
+        # La PK es INTEGER: fuera de su rango no existe usuario, sin desbordar asyncpg.
+        if not -(2**31) <= usuario_id < 2**31:
+            return None
+        resultado = await self.sesion.execute(
+            select(Usuario).where(Usuario.id == usuario_id).options(
+                selectinload(cast(QueryableAttribute[Any], Usuario.roles)),
+            )
+        )
+        return resultado.scalar_one_or_none()
+
     async def get_por_email_con_roles(self, email: str) -> Usuario | None:
         resultado = await self.sesion.execute(
             select(Usuario).where(Usuario.email == email).options(

@@ -5,6 +5,9 @@
 @password = {{$processEnv REGISTRO_PASSWORD}}
 # Definir LOGIN_PASSWORD_INCORRECTA distinta de REGISTRO_PASSWORD, máximo 72 bytes.
 @passwordIncorrecta = {{$processEnv LOGIN_PASSWORD_INCORRECTA}}
+# Para C-03 Bearer: copiar sólo el valor JWT de loginCliente a TOKEN_SOLO_BEARER
+# en el entorno local del cliente HTTP; no guardarlo en este archivo.
+@tokenSoloBearer = {{$processEnv TOKEN_SOLO_BEARER}}
 
 ### C-02 — Registro atómico, correo/documento repetidos
 # @name registroCliente
@@ -140,3 +143,73 @@ Content-Type: application/json
 Cookie: {{loginCliente.response.headers.Set-Cookie}}
 
 {"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-03 — Cookie de registro también inicia sesión
+# @name yoRegistro
+# @no-cookie-jar
+# Esperado: 200; usuario {id,email,nombre,debe_cambiar_password:false};
+# roles_vigentes y roles_token ["CLIENTE"]. Sin hash/token ni Set-Cookie nuevo.
+GET {{baseUrl}}/auth/yo
+Cookie: {{registroCliente.response.headers.Set-Cookie}}
+
+### C-03 — Identidad con cookie de login, aunque hubo fallos posteriores
+# @name yoCliente
+# @no-cookie-jar
+# Esperado: 200; mismo cuerpo mínimo de yoRegistro, sin Set-Cookie ni escrituras.
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-03 — Sin cookie
+# @name yoSinCookie
+# @no-cookie-jar
+# Esperado: 401 {"detail":"La sesión no es válida. Volvé a iniciar sesión."}; sin Set-Cookie.
+GET {{baseUrl}}/auth/yo
+
+### C-03 — Bearer válido no reemplaza la cookie
+# @name yoBearer
+# @no-cookie-jar
+# Esperado: 401, mismo cuerpo de yoSinCookie; sin Set-Cookie ni escrituras.
+GET {{baseUrl}}/auth/yo
+Authorization: Bearer {{tokenSoloBearer}}
+
+### C-01 — Parámetro de ruta no entero con sesión iniciada
+# @name rutaInvalida
+# @no-cookie-jar
+# Esperado: 422 {"detail":[{"msg":"Ingresá un número entero para el cliente seleccionado."}]}
+# Sin ejecutar el handler ni escribir. El CRUD aún está abierto hasta EJ-5.
+GET {{baseUrl}}/clientes/no-entero
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### Logout — Cerrar sesión con cookie
+# @name logoutCliente
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Sesión cerrada"}; access_token vacío; Max-Age=0;
+# Expires pasado; Path=/; HttpOnly; SameSite=Lax; Secure según emisión; sin Domain.
+POST {{baseUrl}}/auth/logout
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### Logout — Después de aceptar la eliminación, no enviar otra cookie
+# @name yoTrasLogout
+# @no-cookie-jar
+# Esperado: 401, mismo cuerpo de yoSinCookie; sin Set-Cookie ni escrituras.
+GET {{baseUrl}}/auth/yo
+
+### Logout — Sin cookie también es público
+# @name logoutSinCookie
+# @no-cookie-jar
+# Esperado: 200, mismo cuerpo y atributos de eliminación de logoutCliente.
+POST {{baseUrl}}/auth/logout
+
+### Logout — Cookie inválida también se elimina
+# @name logoutInvalido
+# @no-cookie-jar
+# Esperado: 200, mismo cuerpo y atributos de eliminación; sin cambios en la base.
+POST {{baseUrl}}/auth/logout
+Cookie: access_token=sesion-invalida
+
+### Logout — No revoca una copia del JWT anterior
+# @name yoCookieCopiada
+# @no-cookie-jar
+# Esperado: 200, mismo cuerpo de yoCliente mientras no venza ni cambie la contraseña.
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginCliente.response.headers.Set-Cookie}}

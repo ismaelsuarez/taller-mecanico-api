@@ -30,9 +30,9 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 
 ## 5. Identidad por cookie y cierre de sesión
 
-- [ ] 5.1 Implementar dependencia mínima reutilizable que lee sólo cookie y verifica JWT/usuario activo/revocación temporal; observar RED/GREEN HTTP para falta de cookie, Bearer sin cookie, firma/claims inválidos, expiración y usuario inexistente/inactivo, sin cablear permisos RBAC.
-- [ ] 5.2 Implementar `/auth/yo` con roles vigentes precargados y roles JWT diferenciados, y logout público con eliminación coherente de cookie; probar roles revocados/vencidos tras emitir token, ausencia de hash, logout con/sin cookie y 401 posterior al eliminarla.
-- [ ] 5.3 Completar C-01/C-03 y ejemplos yo/logout en `test/auth.http`, con cookies de sesiones nombradas sin cookie jar implícito; verificar respuestas/OpenAPI y documentar expresamente que el CRUD/actor temporal se conserva abierto hasta EJ-5.
+- [x] 5.1 Implementar dependencia mínima reutilizable que lee sólo cookie y verifica JWT/usuario activo/revocación temporal; observar RED/GREEN HTTP para falta de cookie, Bearer sin cookie, firma/claims inválidos, expiración y usuario inexistente/inactivo, sin cablear permisos RBAC.
+- [x] 5.2 Implementar `/auth/yo` con roles vigentes precargados y roles JWT diferenciados, y logout público con eliminación coherente de cookie; probar roles revocados/vencidos tras emitir token, ausencia de hash, logout con/sin cookie y 401 posterior al eliminarla.
+- [x] 5.3 Completar C-01/C-03 y ejemplos yo/logout en `test/auth.http`, con cookies de sesiones nombradas sin cookie jar implícito; verificar respuestas/OpenAPI y documentar expresamente que el CRUD/actor temporal se conserva abierto hasta EJ-5.
 
 ## 6. Cambio de contraseña y renovación de sesión
 

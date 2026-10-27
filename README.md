@@ -98,7 +98,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 ## Primitivas de autenticación (EJ-4 en curso)
 
-`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles `POST /auth/registro` y `POST /auth/login`**; identidad (`/auth/yo`), logout y cambio de contraseña siguen pendientes. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
+`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo` y `POST /auth/logout`**; el cambio de contraseña sigue pendiente. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
 
 | Interfaz pública | Uso |
 |---|---|
@@ -110,11 +110,11 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 Registro/login validan las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberan las transacciones durante ese trabajo; el futuro cambio de contraseña debe conservar ese límite. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
 
-JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura las cookies de registro/login, no estas primitivas.
+JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura la emisión y eliminación de cookies, no estas primitivas.
 
 `TokenInvalido` rechaza tokens con firma/claims inválidos o vencidos con un mensaje humano. `sub` identifica al usuario como entero positivo textual; `roles` es una lista de textos, no una autorización. `iat` y `exp` deben ser números finitos (no cadenas ni booleanos); se comparan sin convertirlos a enteros. No se exige issuer ni audience.
 
-Emitir sólo **después del commit**. `emitido_en` admite fechas con zona horaria (por defecto, ahora UTC) y debe ser igual o posterior al cambio de contraseña persistido. La futura dependencia comparará `claims["iat"] < password_cambiada_en.timestamp()` sin truncar y comprobará usuario activo/roles actuales: **esas comprobaciones de base y la revocación HTTP todavía no están implementadas**. El token sólo deberá transportarse en `access_token`, nunca en JSON ni en `Authorization`.
+Emitir sólo **después del commit**. `emitido_en` admite fechas con zona horaria (por defecto, ahora UTC) y debe ser igual o posterior al cambio de contraseña persistido. `get_usuario_actual` compara `claims["iat"] < password_cambiada_en.timestamp()` sin truncar y comprueba usuario activo/roles actuales. El token se transporta sólo en `access_token`, nunca en JSON ni se autentica desde `Authorization`.
 
 Pruebas focalizadas: `test/pytest/auth/test_bcrypt.py` y `test_jwt.py`, con bcrypt/PyJWT reales, límite concurrente, salud disponible y reloj controlado para instantes dentro del mismo segundo.
 
@@ -146,7 +146,18 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 
 **Pruebas automatizadas:** `test/pytest/auth/test_login.py` usa HTTP ASGI, PostgreSQL/Alembic, bcrypt real y lecturas independientes: éxito, ambos 401, sexto bloqueo, rollback, validación y OpenAPI. Mide tres verificaciones reales/ficticias por camino, sin umbral absoluto ni esperas artificiales. Incluye bordes de 60 s, intentos futuros excluidos, reset por último éxito sin borrar (también fechas iguales), aislamiento de correo exacto/IP, conteo de nuevos 429, Retry-After mínimo, 72 bytes válidos y JSON/correo inválidos. `test_intentos.py` conserva además la cobertura del repositorio.
 
-**Casos manuales:** `test/auth.http` conserva C-02 y agrega C-04/C-05 con sesiones nombradas, sin cookie jar implícito. Definí `REGISTRO_PASSWORD` y `LOGIN_PASSWORD_INCORRECTA` distintas, de hasta 72 bytes; ejecutá seed sobre la misma base aislada de prueba que usa la API. Corré el archivo en orden, con los seis intentos C-05 dentro de 60 s. Deben quedar nueve intentos (ocho fallidos y uno exitoso), un evento de registro y un evento bloqueado adicionales al seed; ningún intento se borra. **Evidencia de esta unidad:** los 12 bloques C-02/C-04/C-05 se ejecutaron por TCP tras Alembic/seed en bases aisladas. La suite completa y su verificación independiente dieron 531 pruebas aprobadas, ninguna omitida y 18 advertencias conocidas de la clave JWT de test. El diferencial contra `b3a903a` conservó 75 solicitudes por versión y 15 operaciones OpenAPI existentes sin diferencias no solicitadas. Esto verifica registro/login, no las tareas pendientes de identidad, logout, cambio de contraseña o EJ-5.
+**Casos manuales:** `test/auth.http` conserva C-02 y agrega C-04/C-05 con sesiones nombradas, sin cookie jar implícito. Definí `REGISTRO_PASSWORD` y `LOGIN_PASSWORD_INCORRECTA` distintas, de hasta 72 bytes; ejecutá seed sobre la misma base aislada de prueba que usa la API. Corré el archivo en orden, con los seis intentos C-05 dentro de 60 s. Deben quedar nueve intentos (ocho fallidos y uno exitoso), un evento de registro y un evento bloqueado adicionales al seed; ningún intento se borra. **Evidencia de esta unidad:** los 12 bloques C-02/C-04/C-05 se ejecutaron por TCP tras Alembic/seed en bases aisladas. La suite completa y su verificación independiente dieron 531 pruebas aprobadas, ninguna omitida y 18 advertencias conocidas de la clave JWT de test. El diferencial contra `b3a903a` conservó 75 solicitudes por versión y 15 operaciones OpenAPI existentes sin diferencias no solicitadas. Esa evidencia corresponde a T4 (registro/login), no a T5, cambio de contraseña o EJ-5.
+
+### Identidad y logout (OPSX 5.1–5.3)
+
+- `GET /auth/yo` exige exclusivamente cookie: devuelve `usuario: {id,email,nombre,debe_cambiar_password}`, `roles_vigentes` y `roles_token`, sin secretos ni cookie nueva. Los roles actuales se precargan y excluyen revocados/vencidos; tener cero roles o cambio pendiente no impide esta consulta.
+- Cookie ausente (también Bearer sin cookie), JWT inválido/vencido, usuario inexistente/inactivo o emisión anterior al último cambio → **401** `{"detail":"La sesión no es válida. Volvé a iniciar sesión."}`. Se conserva la fracción original; igualdad con el cambio es válida.
+- `POST /auth/logout` es público, incluso con cookie inválida/ausente: **200** `{"mensaje":"Sesión cerrada"}` y eliminación con Path=/, sin Domain, HttpOnly, SameSite=Lax, Secure configurable, Max-Age=0 y Expires pasado. No modifica la base ni revoca copias del JWT: pueden seguir válidas hasta expirar/cambiar contraseña.
+- OpenAPI publica yo 200/401 y logout 200, ambos con el 422 heredado del montaje común. **CRUD/`actor_temporal` permanecen abiertos hasta EJ-5**; no hay RBAC ni bloqueo global por contraseña pendiente.
+
+`test_identidad.py`/`test_logout.py` verifican HTTP ASGI y PostgreSQL/Alembic reales: claims, estado actual, frontera ±1 microsegundo, roles cambiados, eliminación y ausencia de escrituras. Focalizadas T5 + expectativa OpenAPI previa: **33 aprobadas, 0 omitidas**. La suite completa y la ejecución host solicitada por el verificador independiente dieron **563 aprobadas, 0 omitidas y 76 advertencias conocidas** de la clave JWT de fixture. Los **22 bloques TCP** pasaron tras Alembic/seed en bases aisladas. El diferencial contra `9cb3f16` conservó 15 solicitudes por versión a los tres consumidores de `actor_temporal`, con códigos, cuerpos, encabezados y efectos auditados equivalentes. Sólo normaliza fechas previamente validadas; compara stderr bajo el mismo formato sin frames de traceback. El dictamen independiente cubre T5, no cambio de contraseña, EJ-5 ni cierre global de EJ-4.
+
+`test/auth.http` agrega C-01/C-03 y yo/logout (22 bloques en total), conservando C-02/C-04/C-05. Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
 
 ## Endpoints
 
@@ -169,7 +180,7 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 
 El hash precede cualquier transacción. Usuario, rol CLIENTE, ficha y evento «Alta de usuario cliente (registro)» (actor: correo nuevo) se confirman juntos. Un fallo revierte el conjunto, incluso si falla el commit, y no entrega cookie.
 
-Sólo tras confirmar se emite `access_token`: HttpOnly, SameSite=Lax, Path=/, sin Domain, Max-Age igual a la duración y Secure según `COOKIE_SECURE`. El cuerpo nunca incluye token ni hash. La consulta HTTP de identidad aún está pendiente; los tests verifican la cookie con el verificador JWT real.
+Sólo tras confirmar se emite `access_token`: HttpOnly, SameSite=Lax, Path=/, sin Domain, Max-Age igual a la duración y Secure según `COOKIE_SECURE`. El cuerpo nunca incluye token ni hash. La cookie también permite consultar `/auth/yo`; los tests verifican ambas rutas con JWT y base reales.
 
 Ejemplo ejecutable: `test/auth.http`, con contraseña efímera desde `REGISTRO_PASSWORD`. Corré seed antes del archivo **sólo sobre una base de test**, con API y seed apuntando a esa misma base. Pruebas automatizadas: `test/pytest/auth/test_registro{,_uow}.py` (HTTP, lectura independiente y fallo de commit).
 

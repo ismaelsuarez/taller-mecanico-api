@@ -8,10 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.database import SesionDep
+from app.core.dependencies import UsuarioActualDep
 from app.core.errores import RespuestaAutenticacion
 from app.core.security import emitir_token
 from app.modules.usuarios import service
-from app.modules.usuarios.schemas import LoginEntrada, RegistroEntrada, SesionLectura
+from app.modules.usuarios.schemas import (
+    IdentidadLectura,
+    LoginEntrada,
+    MensajeLectura,
+    RegistroEntrada,
+    SesionLectura,
+)
 from app.modules.usuarios.unit_of_work import UnitOfWorkIntentoAcceso, UnitOfWorkUsuario
 
 router = APIRouter(prefix="/auth", tags=["autenticación"])
@@ -52,6 +59,23 @@ def poner_cookie_sesion(
         max_age=settings.access_token_expire_seconds, path="/",
         secure=settings.cookie_secure, httponly=True, samesite="lax",
     )
+
+
+@router.post("/logout", summary="Cerrar sesión eliminando la cookie; no requiere sesión válida")
+async def cerrar_sesion(request: Request, response: Response) -> MensajeLectura:
+    response.delete_cookie(
+        "access_token", path="/", secure=request.app.state.settings.cookie_secure,
+        httponly=True, samesite="lax",
+    )
+    return MensajeLectura(mensaje="Sesión cerrada")
+
+
+@router.get(
+    "/yo", summary="Consultar identidad por cookie (no acepta Bearer)",
+    responses={401: {"model": RespuestaAutenticacion, "description": "Sesión ausente o no válida"}},
+)
+async def obtener_identidad(usuario: UsuarioActualDep) -> IdentidadLectura:
+    return usuario
 
 
 @router.post(

@@ -61,7 +61,7 @@ Si durante la implementación aparece una duda nueva, se agrega acá con su prio
 ## Contratos complementarios resueltos durante EJ-4
 
 **Duda**: la consigna no fija todas las claves de salida de registro, cambio, logout y yo, ni los nombres del cuerpo del cambio.
-**Resolución**: DD-45 registra el supuesto complementario D1 del diseño aprobado, sus formas JSON y los límites de entrada; no agrega políticas de contraseña/correo ni autorización de EJ-5. Esta unidad sólo implementa contratos/fixtures; las rutas y cookies siguen pendientes. No queda una decisión bloqueante para estos contratos.
+**Resolución**: DD-45 registra el supuesto complementario D1 del diseño aprobado, sus formas JSON y los límites de entrada; no agrega políticas de contraseña/correo ni autorización de EJ-5. Registro/login/identidad/logout ya implementan sus contratos y cookies; cambio de contraseña sigue pendiente. DD-47 registra el alcance de cookie propuesto en D5 y el mensaje humano de identidad, sin una nueva decisión bloqueante. No queda una decisión bloqueante para estos contratos.
 
 ## Discovery (`state.kb.discovery`)
 

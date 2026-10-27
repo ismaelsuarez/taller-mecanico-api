@@ -1,4 +1,4 @@
-"""Registro atómico y login auditado; bcrypt sin transacción ni conexión retenida."""
+"""Registro, login auditado e identidad vigente; bcrypt sin conexión retenida."""
 
 from datetime import UTC, datetime, timedelta
 from math import ceil
@@ -14,8 +14,36 @@ from app.modules.usuarios.models import (
     IntentoAcceso,
     Usuario,
 )
-from app.modules.usuarios.schemas import LoginEntrada, RegistroEntrada
+from app.modules.usuarios.schemas import (
+    IdentidadLectura,
+    LoginEntrada,
+    RegistroEntrada,
+    UsuarioLectura,
+)
 from app.modules.usuarios.unit_of_work import UnitOfWorkIntentoAcceso, UnitOfWorkUsuario
+
+
+async def obtener_identidad(
+    uow: UnitOfWorkUsuario, claims: security.ClaimsSesion,
+) -> IdentidadLectura:
+    """Consultar estado actual sin reemitir el token ni aplicar permisos RBAC."""
+    identidad = None
+    async with uow:
+        usuario = await uow.usuarios.get_por_id_con_roles(int(claims["sub"]))
+        if (usuario is None or not usuario.activo or (
+            usuario.password_cambiada_en is not None
+            and claims["iat"] < usuario.password_cambiada_en.timestamp()
+        )):
+            raise NoAutenticado("La sesión no es válida. Volvé a iniciar sesión.")
+        ahora = datetime.now(UTC)
+        identidad = IdentidadLectura(
+            usuario=UsuarioLectura.model_validate(usuario),
+            roles_vigentes=[rol.rol for rol in usuario.roles
+                            if rol.revocada_en is None and (rol.vence_en is None or rol.vence_en > ahora)],
+            roles_token=claims["roles"],
+        )
+    assert identidad is not None
+    return identidad
 
 
 async def registrar_usuario(
