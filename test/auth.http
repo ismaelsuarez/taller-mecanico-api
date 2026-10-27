@@ -1,0 +1,37 @@
+# Ejecutar seed.py antes del archivo, sólo en POSTGRES_TEST_DB.
+# API y seed deben apuntar a esa misma base de prueba; nunca a desarrollo.
+# Definir REGISTRO_PASSWORD con una contraseña efímera (máximo 72 bytes).
+@baseUrl = http://localhost:8000
+@password = {{$processEnv REGISTRO_PASSWORD}}
+
+### C-02 — Registro atómico, correo/documento repetidos
+# @name registroCliente
+# @no-cookie-jar
+# Esperado: 201; {"mensaje":"Registro completado","debe_cambiar_password":false,"expira_en_segundos":1800}
+# La duración es configurable. Set-Cookie access_token: HttpOnly; SameSite=Lax;
+# Path=/; Max-Age=duración; Secure según configuración. Sin token/hash en JSON.
+# Base: usuario + rol CLIENTE + ficha + evento con el correo nuevo como actor.
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{"email":"registro-http@example.com","password":"{{password}}","nombre":"Cliente HTTP","documento":"HTTP-REG-1","telefono":"12345"}
+
+### C-02 — Correo repetido, sin reutilizar la sesión anterior
+# @name correoRepetido
+# @no-cookie-jar
+# Esperado: 409 {"detail":"Ya existe un usuario con ese correo."}
+# Sin Set-Cookie ni filas nuevas (incluido evento); no existe ficha HTTP-REG-2.
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{"email":"registro-http@example.com","password":"{{password}}","nombre":"Cliente HTTP","documento":"HTTP-REG-2","telefono":"12345"}
+
+### C-02 — Documento repetido
+# @name documentoRepetido
+# @no-cookie-jar
+# Esperado: 409 {"detail":"Ya existe un cliente con ese documento."}
+# Sin Set-Cookie, apropiación ni filas sueltas; no existe otro-http@example.com.
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{"email":"otro-http@example.com","password":"{{password}}","nombre":"Cliente HTTP","documento":"HTTP-REG-1","telefono":"12345"}

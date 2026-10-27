@@ -11,8 +11,8 @@ Base: `c98b3c026a9f1c7fc698d39d0650be28fc080d26`; rama `feat/04-autenticacion`. 
 
 - T0 [done] — S1 — parent: rama, tracking, runner y PostgreSQL aislada disponibles; commit: `7012216`.
 - T1 [done] — S1 — OPSX 1.1–1.3 implementadas/verificadas, revisión nativa aprobada y consumida; commit: `e4eb8d8a9bf1b17c6738200f77db0849268343b0`.
-- T2 [in_progress] — S1 — OPSX 2.1–2.3 implementadas/verificadas; pendiente revisión nativa; base: `e4eb8d8`; commit: `feat(auth): add async bcrypt verification and signed sessions` (SHA tras commit).
-- T3 [pending] — S1 — worker acotado por context backstop: OPSX 3.1–3.3, registro atómico; commit: pendiente.
+- T2 [done] — S1 — OPSX 2.1–2.3 implementadas/verificadas, diferencial y revisión nativa consumida; commit: `7bc8e56b6ced7b6546fd0bd5b6896973d0dc2a5f`.
+- T3 [in_progress] — S1 — OPSX 3.1–3.3 implementadas/verificadas, pendiente revisión nativa; base: `7bc8e56`; commit: `feat(auth): register clients atomically with session cookies` (SHA tras commit).
 - T4 [pending] — S1 — worker acotado por context backstop: OPSX 4.1–4.3, login/límite/intentos; commit: pendiente.
 - T5 [pending] — S1 — worker acotado por context backstop: OPSX 5.1–5.3, identidad/logout; commit: pendiente.
 - T6 [pending] — S1 — worker acotado por context backstop: OPSX 6.1–6.3, cambio de contraseña; commit: pendiente.
@@ -46,3 +46,19 @@ Base: `c98b3c026a9f1c7fc698d39d0650be28fc080d26`; rama `feat/04-autenticacion`. 
 
 - L18: Verificador T2 PASS 2.1/2.2/2.3: 176 passed/0 skipped; diferencial único exit0, 16 subprocesos, ocho igualdades BASE/candidato y dos idempotencias. Incluye seed sin migrar/primero/repetido/costes4y7, Alembic,13tablas/5secuencias/42hashes, lifespan y salud. Sólo normaliza sales bcrypt verificadas y marcas temporales seed; sin diferencias no pedidas. Evidencia completa resumida en Engram2339. OPSX admitió 4/22 → 5/22 → 6/22; T2 aún no tiene revisión nativa.
 - L19: Limpieza del child bloqueada por su harness, no defecto funcional. Parent validó ruta, huellas,54archivos/12directorios/cero symlinks y caché pytest del script; eliminó sólo scratch generado, exit0. La primera guardia había detectado esa caché adicional y no borró nada. DB y `.review-units/` preservados.
+
+- L20: T2 cerrada: frontera `e4eb8d8..7bc8e56`,359líneas, no revisión del acumulado de la rama. Cuatro lentes aprobadas en `review-468f406d53a98ad2`; acknowledgement confirmó authority=burned, target `sha256:e8cfbdffa4a31b17eff003434ef29676ea1a53f058e00488b4434b87076c93a8`, revisión consumida `sha256:6287f17c6c78645612b98d68a903faccd538c4f6173c3cf03e6917b8b855006c`. Advisory informativo no bloqueante `R3-bcrypt-cancellation` en security.py:46–47 se conserva como seguimiento separado, sin corrección ni reapertura. OPSX6/22; siguiente slice desde `7bc8e56`.
+
+- L21: T3 delegada a `mvqpy6x6-7-tcpm`, OPSX3.1–3.3: repositorios/UoW/servicio/router de usuarios, montaje main, tests de registro, C-02/README y KB sólo si procede. Base `7bc8e56`; temporales limitados a `test/pytest/.tmp-t3-7bc8e56/` (ausente/no symlink comprobado). Sin login/EJ5 ni corrección del advisory T2. Si la cobertura completa exige exceder sustancialmente ~400líneas, devuelve slice parcial coherente verificado y división secuencial, sin recortar tests.
+
+- L22: T3 entregada en nueve archivos,443líneas (437+ /6-), con tests/docs del mismo comportamiento; se mantiene como slice coherente sin recortar cobertura. Worker357passed/0skipped56.26s y C-02TCP201/409/409 trasAlembic/seed. Parent readback y LSP7Python sin diagnósticos; archivos candidatos stageados. Core UoW/errors/security/CRUD sin diff. Seis warnings JWT de fixture corta reportados; ninguna casilla T3 admitida todavía.
+- L23: Independiente T3 `mvqqml24-8-6m4c` en curso: suite combinada, C-02TCP sobreDB `_verify`, y un diferencial del montaje existente contra `7bc8e56`. Scratchverifier limitado a `test/pytest/.tmp-t3-verify-7bc8e56/`, previamente ausente/no symlink. Leerá runnerwriter retenido en `.tmp-t3-7bc8e56/` antes de adaptar sólo su copia. El padre realizará la limpieza final de ambos directorios; el child no intentará borrado recursivo. Sin revisión nativa T3 aún.
+
+- L24: Suite independiente T3 ya terminó una sola vez: exit0,357passed/0skips,61.52s; seis InsecureKeyLengthWarning originados en clave de fixture18bytes. El child sólo dispone de bash síncrono y usó background+wait/timeout180 antes de recibir aclaración del padre: desviación de transporte registrada, sin duplicar pruebas. TCP/diferencial se preparan en scratch y serán solicitados al host con comando exacto; aún no hay veredicto integral T3.
+
+- L25: Verificador confirmó origen de seis warnings en CLAVE_DE_TEST18bytes de conftest raíz; scripts usan claves efímeras>=32bytes. Padre leyó íntegros C02/diferencial/probe y comprobó sus tres SHA256. Ejecución única host `job-3`: C02TCP seguido de diferencial con &&, sólo DB `_verify`, logs separados en scratchverifier. Sigue pendiente evento/veredicto; no repetir suite ni hacer polling.
+
+- L26: Host `job-3` terminó exit0/12s. Logs leídos: C-02TCP201/409/409 conbody/headers/DB correctos trasAlembic/seed, stderr vacío. Diferencial48HTTPporversión+11pathsOpenAPI existentes, nueve comparaciones de exit/stdout/stderr todasTRUE; sólo cuandoaware yContent-Lengthderivado normalizados. Evidencia enviada al verificador para dictamen final, sin nuevas ejecuciones ni limpieza prematura.
+
+- L27: Independiente T3 PASS3.1/3.2/3.3, sin hallazgos fuente; suite357passed0skips, C02TCP y diferencial ya registrados. Seiswarningsfixture18bytes y advisorypi-lens no inspeccionado porchild conservados como limitaciones, no atribuidos a producción. OPSX admitió7/22→8/22→9/22; aún no hay revisión nativa de esta unidad.
+- L28: Parent cotejó manifestfinal declarado y todas sus entradas (82archivos+12dirs,0symlinks), fuentes9/9==snapshot==stage y core/CRUD sin diff. Cabeceras de trespyc coinciden con scripts; origenNOatribuido. Guardia anteriorrechazóhashprevio sin borrar; tras cotejo válido se eliminaron sólo ambos scratchT3, exit0/ausenciaconfirmada. DB y `.review-units/` intactos. Sin repetición de pruebas.

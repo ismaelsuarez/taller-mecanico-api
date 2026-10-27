@@ -98,7 +98,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 ## Primitivas de autenticación (EJ-4 en curso)
 
-`app/core/security.py` ya ofrece los helpers de bcrypt y JWT. **Todavía no hay rutas `/auth`, cookies ni servicios de autenticación**; el CRUD y `actor_temporal` siguen abiertos hasta EJ-5.
+`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Está implementado sólo `POST /auth/registro`**; login, identidad (`/auth/yo`), logout y cambio de contraseña siguen pendientes. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
 
 | Interfaz pública | Uso |
 |---|---|
@@ -110,7 +110,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 Los futuros servicios deben validar las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberar las transacciones durante ese trabajo. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
 
-JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` queda disponible para las rutas futuras, no interviene en estas primitivas.
+JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura la cookie del registro, no estas primitivas.
 
 `TokenInvalido` rechaza tokens con firma/claims inválidos o vencidos con un mensaje humano. `sub` identifica al usuario como entero positivo textual; `roles` es una lista de textos, no una autorización. `iat` y `exp` deben ser números finitos (no cadenas ni booleanos); se comparan sin convertirlos a enteros. No se exige issuer ni audience.
 
@@ -128,6 +128,20 @@ Pruebas focalizadas: `test/pytest/auth/test_bcrypt.py` y `test_jwt.py`, con bcry
 |---|---|---|
 | GET | `/health/live` | 200 mientras el proceso esté vivo (no consulta la base) |
 | GET | `/health/ready` | 200 si la base contesta, 503 si no |
+
+### Registro público (C-02)
+
+`POST /auth/registro` recibe `{email, password, nombre, documento, telefono}` sin extras; `nombre` se usa también en la ficha. La contraseña admite hasta **72 bytes UTF-8** (36 `ñ`), sin requisitos nuevos de complejidad ni normalización de correo (DD-45).
+
+- **201**: `{"mensaje":"Registro completado","debe_cambiar_password":false,"expira_en_segundos":1800}`; la duración real sale de `ACCESS_TOKEN_EXPIRE_SECONDS`.
+- **409**: `{"detail":"Ya existe un usuario con ese correo."}` o `{"detail":"Ya existe un cliente con ese documento."}`. No vincula fichas existentes, aunque no tengan usuario.
+- **422**: formato humano descrito arriba, sin eco de contraseñas.
+
+El hash precede cualquier transacción. Usuario, rol CLIENTE, ficha y evento «Alta de usuario cliente (registro)» (actor: correo nuevo) se confirman juntos. Un fallo revierte el conjunto, incluso si falla el commit, y no entrega cookie.
+
+Sólo tras confirmar se emite `access_token`: HttpOnly, SameSite=Lax, Path=/, sin Domain, Max-Age igual a la duración y Secure según `COOKIE_SECURE`. El cuerpo nunca incluye token ni hash. La consulta HTTP de identidad aún está pendiente; los tests verifican la cookie con el verificador JWT real.
+
+Ejemplo ejecutable: `test/auth.http`, con contraseña efímera desde `REGISTRO_PASSWORD`. Corré seed antes del archivo **sólo sobre una base de test**, con API y seed apuntando a esa misma base. Pruebas automatizadas: `test/pytest/auth/test_registro{,_uow}.py` (HTTP, lectura independiente y fallo de commit).
 
 ### Clientes y vehículos
 

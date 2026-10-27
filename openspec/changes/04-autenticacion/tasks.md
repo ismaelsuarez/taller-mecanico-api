@@ -18,9 +18,9 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 
 ## 3. Registro atómico y cookie posterior al commit
 
-- [ ] 3.1 Componer repositorios y UoW de usuarios con cliente/asignaciones/eventos en una sola sesión, manteniendo `flush` en repositorios y commit exclusivo del UoW; probar registro completo y rollback por unicidad/fallo de confirmación contra base real y observar estado desde otra sesión.
-- [ ] 3.2 Implementar servicio y ruta de registro con hash previo a cualquier transacción, emisión de cookie tras commit y montaje abierto de `/auth`; observar RED/GREEN HTTP de 201, correo/documento duplicados 409, prohibición de apropiarse de ficha existente, extras 422 y ausencia de filas parciales/cookie en errores.
-- [ ] 3.3 Incorporar C-02 en `test/auth.http` con respuestas esperadas, sesiones explícitas y ejecución tras seed de prueba; documentar registro en README/OpenAPI y verificar que contrato, atributos de cookie y eventos/actores coinciden con las respuestas observadas.
+- [x] 3.1 Componer repositorios y UoW de usuarios con cliente/asignaciones/eventos en una sola sesión, manteniendo `flush` en repositorios y commit exclusivo del UoW; probar registro completo y rollback por unicidad/fallo de confirmación contra base real y observar estado desde otra sesión.
+- [x] 3.2 Implementar servicio y ruta de registro con hash previo a cualquier transacción, emisión de cookie tras commit y montaje abierto de `/auth`; observar RED/GREEN HTTP de 201, correo/documento duplicados 409, prohibición de apropiarse de ficha existente, extras 422 y ausencia de filas parciales/cookie en errores.
+- [x] 3.3 Incorporar C-02 en `test/auth.http` con respuestas esperadas, sesiones explícitas y ejecución tras seed de prueba; documentar registro en README/OpenAPI y verificar que contrato, atributos de cookie y eventos/actores coinciden con las respuestas observadas.
 
 ## 4. Login limitado y auditado
 

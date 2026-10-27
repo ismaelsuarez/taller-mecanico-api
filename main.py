@@ -13,6 +13,7 @@ from app.core.security import configurar_semaforo_bcrypt, hashear_password
 from app.modules.clientes.router import router as router_clientes
 from app.modules.health.router import router as router_salud
 from app.modules.repuestos.router import router as router_repuestos
+from app.modules.usuarios.router import router as router_auth
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ registrar_traductores(app)
 # El grupo protegido llega en EJ-5 (T-11).
 rutas_abiertas = APIRouter()
 rutas_abiertas.include_router(router_salud)
+rutas_abiertas.include_router(router_auth, responses={422: {"model": RespuestaValidacion}})
 rutas_abiertas.include_router(
     router_clientes, responses={422: {"model": RespuestaValidacion}}
 )
