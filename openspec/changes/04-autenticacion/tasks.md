@@ -25,8 +25,8 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 ## 4. Login limitado y auditado
 
 - [x] 4.1 Agregar consulta del límite correo/IP y UoW de intentos con sesión independiente, junto con comentario de costo/rollback; observar RED/GREEN para cinco fallos, límite de 60 s, reinicio tras éxito sin borrado, aislamiento correo/IP y persistencia de intentos ante rollback de la petición.
-- [ ] 4.2 Implementar login con lectura breve cerrada antes de bcrypt, verificación real/ficticia, caso inactivo DD-24 y traducción explícita 401/429 con `Retry-After`; probar sexto intento sin bcrypt, evento bloqueado, igualdad exacta de cuerpos 401, costo comparable, resultado exitoso y ausencia de cookie cuando falla el commit obligatorio.
-- [ ] 4.3 Agregar C-04/C-05 a `test/auth.http`, documentar ventana y conteo de 429 de D3, mensajes y excepción transaccional; verificar OpenAPI 200/401/422/429, encabezado Retry-After, todas las filas/eventos esperados y regresiones de 404/409/422/paginación tras tocar errores compartidos.
+- [x] 4.2 Implementar login con lectura breve cerrada antes de bcrypt, verificación real/ficticia, caso inactivo DD-24 y traducción explícita 401/429 con `Retry-After`; probar sexto intento sin bcrypt, evento bloqueado, igualdad exacta de cuerpos 401, costo comparable, resultado exitoso y ausencia de cookie cuando falla el commit obligatorio.
+- [x] 4.3 Agregar C-04/C-05 a `test/auth.http`, documentar ventana y conteo de 429 de D3, mensajes y excepción transaccional; verificar OpenAPI 200/401/422/429, encabezado Retry-After, todas las filas/eventos esperados y regresiones de 404/409/422/paginación tras tocar errores compartidos.
 
 ## 5. Identidad por cookie y cierre de sesión
 

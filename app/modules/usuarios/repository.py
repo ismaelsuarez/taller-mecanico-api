@@ -2,9 +2,11 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import QueryableAttribute, selectinload
 from sqlmodel import col, select
 
 from app.core.repository import BaseRepository
@@ -19,6 +21,14 @@ from app.modules.usuarios.models import (
 class UsuarioRepository(BaseRepository[Usuario]):
     def __init__(self, sesion: AsyncSession) -> None:
         super().__init__(sesion, Usuario)
+
+    async def get_por_email_con_roles(self, email: str) -> Usuario | None:
+        resultado = await self.sesion.execute(
+            select(Usuario).where(Usuario.email == email).options(
+                selectinload(cast(QueryableAttribute[Any], Usuario.roles)),
+            )
+        )
+        return resultado.scalar_one_or_none()
 
 
 class AsignacionRolRepository(BaseRepository[AsignacionRol]):

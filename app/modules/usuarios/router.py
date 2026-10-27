@@ -1,4 +1,4 @@
-"""Registro público; la respuesta de sesión se emite sólo tras confirmar el UoW."""
+"""Registro/login públicos; cookie sólo después de las confirmaciones obligatorias."""
 
 from collections.abc import AsyncIterator
 from typing import Annotated
@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.database import SesionDep
+from app.core.errores import RespuestaAutenticacion
 from app.core.security import emitir_token
 from app.modules.usuarios import service
-from app.modules.usuarios.schemas import RegistroEntrada, SesionLectura
+from app.modules.usuarios.schemas import LoginEntrada, RegistroEntrada, SesionLectura
 from app.modules.usuarios.unit_of_work import UnitOfWorkIntentoAcceso, UnitOfWorkUsuario
 
 router = APIRouter(prefix="/auth", tags=["autenticación"])
@@ -35,7 +36,7 @@ SesionIntentosDep = Annotated[AsyncSession, Depends(get_session_intentos)]
 
 
 def construir_uow_intentos(sesion: SesionIntentosDep) -> UnitOfWorkIntentoAcceso:
-    """Se entrega sin abrir; el servicio futuro lo abre en fases cortas."""
+    """Se entrega sin abrir; el servicio lo abre en fases cortas."""
     return UnitOfWorkIntentoAcceso(sesion)
 
 
@@ -50,6 +51,35 @@ def poner_cookie_sesion(
         "access_token", emitir_token(usuario_id, roles, settings),
         max_age=settings.access_token_expire_seconds, path="/",
         secure=settings.cookie_secure, httponly=True, samesite="lax",
+    )
+
+
+@router.post(
+    "/login", summary="Iniciar sesión por cookie",
+    responses={
+        401: {"model": RespuestaAutenticacion, "description": "Credenciales incorrectas o cuenta inactiva"},
+        429: {
+            "model": RespuestaAutenticacion, "description": "Demasiados intentos del mismo correo/IP",
+            "headers": {"Retry-After": {
+                "description": "Segundos hasta que salga el fallo vigente más antiguo; se reevalúa el límite.",
+                "schema": {"type": "integer", "minimum": 1},
+            }},
+        },
+    },
+)
+async def iniciar_sesion(
+    datos: LoginEntrada, uow: UowUsuarioDep, intentos: UowIntentosDep,
+    request: Request, response: Response,
+) -> SesionLectura:
+    settings = request.app.state.settings
+    assert request.client is not None
+    usuario_id, pendiente, roles = await service.iniciar_sesion(
+        uow, intentos, datos, request.client.host, request.app.state.hash_ficticio,
+    )
+    poner_cookie_sesion(response, usuario_id, roles, settings)
+    return SesionLectura(
+        mensaje="Sesión iniciada", debe_cambiar_password=pendiente,
+        expira_en_segundos=settings.access_token_expire_seconds,
     )
 
 

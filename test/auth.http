@@ -3,6 +3,8 @@
 # Definir REGISTRO_PASSWORD con una contraseña efímera (máximo 72 bytes).
 @baseUrl = http://localhost:8000
 @password = {{$processEnv REGISTRO_PASSWORD}}
+# Definir LOGIN_PASSWORD_INCORRECTA distinta de REGISTRO_PASSWORD, máximo 72 bytes.
+@passwordIncorrecta = {{$processEnv LOGIN_PASSWORD_INCORRECTA}}
 
 ### C-02 — Registro atómico, correo/documento repetidos
 # @name registroCliente
@@ -35,3 +37,106 @@ POST {{baseUrl}}/auth/registro
 Content-Type: application/json
 
 {"email":"otro-http@example.com","password":"{{password}}","nombre":"Cliente HTTP","documento":"HTTP-REG-1","telefono":"12345"}
+
+### C-04 — Correo existente, contraseña incorrecta
+# @name loginIncorrecto
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; un intento fallido confirmado, ningún evento nuevo.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-04 — Correo inexistente, mismo cuerpo y costo comparable
+# @name loginInexistente
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; otro intento fallido, sin usuario/ficha/evento nuevo.
+# Comparar tiempos con loginIncorrecto: ambos hacen un check bcrypt del mismo costo.
+# Las mediciones repetidas y trabajo real/ficticio se verifican en test_login.py.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"inexistente-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Preparación: éxito reinicia el conteo, no borra C-04
+# @name loginCliente
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}
+# Duración configurable; cookie con HttpOnly, SameSite=Lax, Path=/, Max-Age y Secure configurable.
+# Sin token/hash en JSON; se agrega un intento exitoso, ningún evento nuevo.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{registroCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{password}}"}
+
+### C-05 — Fallo 1 de 6; ejecutar los seis en menos de 60 segundos
+# @name fallo1
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; agrega un intento fallido, ningún evento.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Fallo 2 de 6
+# @name fallo2
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; agrega un intento fallido, ningún evento.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Fallo 3 de 6
+# @name fallo3
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; agrega un intento fallido, ningún evento.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Fallo 4 de 6
+# @name fallo4
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; agrega un intento fallido, ningún evento.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Fallo 5 de 6
+# @name fallo5
+# @no-cookie-jar
+# Esperado: 401 {"detail":"El correo o la contraseña no son correctos."}
+# Sin Set-Cookie ni Retry-After; agrega el quinto fallo posterior al éxito, ningún evento.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
+
+### C-05 — Sexto intento bloqueado antes de buscar credenciales o ejecutar bcrypt
+# @name fallo6
+# @no-cookie-jar
+# Esperado: 429 {"detail":"Demasiados intentos. Volvé a intentar más tarde."}
+# Retry-After positivo; sin Set-Cookie; agrega exito=false y evento
+# «Login bloqueado por demasiados intentos», actor registro-http@example.com.
+# Total del archivo: nueve intentos (ocho fallidos, uno exitoso), sin borrar C-04.
+# Los 429 también cuentan: Retry-After no garantiza acceso si hubo nuevos fallos.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+{"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}

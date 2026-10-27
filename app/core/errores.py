@@ -1,4 +1,4 @@
-"""Errores de dominio (404/409) y validación de peticiones (422).
+"""Errores de dominio (401/404/409/429) y validación de peticiones (422).
 
 El dominio conserva sus mensajes propios. La validación se traduce sin devolver
 entrada, ubicaciones técnicas ni texto interno del validador (RN-18, S-9).
@@ -26,6 +26,14 @@ class RespuestaValidacion(BaseModel):
     detail: list[MensajeValidacion] | str
 
 
+class RespuestaAutenticacion(BaseModel):
+    """Rechazo 401/429 con un único mensaje público."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: str
+
+
 class ErrorDeDominio(Exception):
     """Base de las excepciones de negocio que la aplicación traduce a HTTP."""
 
@@ -36,6 +44,18 @@ class NoEncontrado(ErrorDeDominio):
 
 class EnConflicto(ErrorDeDominio):
     """La operación choca con una regla de unicidad o de negocio → 409."""
+
+
+class NoAutenticado(ErrorDeDominio):
+    """Credenciales rechazadas con mensaje público → 401."""
+
+
+class DemasiadosIntentos(ErrorDeDominio):
+    """Límite de login alcanzado → 429 con segundos de espera."""
+
+    def __init__(self, reintentar_en: int) -> None:
+        super().__init__("Demasiados intentos. Volvé a intentar más tarde.")
+        self.reintentar_en = reintentar_en
 
 
 def _respuesta_de_dominio(error: ErrorDeDominio) -> JSONResponse:
@@ -112,6 +132,17 @@ def registrar_traductores(app: FastAPI) -> None:
                 "detail": [{"msg": _mensaje_validacion(fallo)} for fallo in error.errors()]
             },
         )
+
+    @app.exception_handler(DemasiadosIntentos)
+    async def _traducir_limite(request: Request, error: DemasiadosIntentos) -> JSONResponse:
+        return JSONResponse(
+            status_code=429, content={"detail": str(error)},
+            headers={"Retry-After": str(error.reintentar_en)},
+        )
+
+    @app.exception_handler(NoAutenticado)
+    async def _traducir_no_autenticado(request: Request, error: NoAutenticado) -> JSONResponse:
+        return JSONResponse(status_code=401, content={"detail": str(error)})
 
     @app.exception_handler(NoEncontrado)
     async def _traducir_no_encontrado(request: Request, error: NoEncontrado) -> JSONResponse:

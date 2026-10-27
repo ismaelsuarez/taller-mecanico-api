@@ -98,7 +98,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 ## Primitivas de autenticación (EJ-4 en curso)
 
-`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Está implementado sólo `POST /auth/registro`**; login, identidad (`/auth/yo`), logout y cambio de contraseña siguen pendientes. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
+`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles `POST /auth/registro` y `POST /auth/login`**; identidad (`/auth/yo`), logout y cambio de contraseña siguen pendientes. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
 
 | Interfaz pública | Uso |
 |---|---|
@@ -108,9 +108,9 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 | `emitir_token(usuario_id: int, roles: list[str], settings: Settings, *, emitido_en: datetime \| None = None) -> str` | Firma `sub` textual, `iat` fraccional, `exp` y roles informativos; devuelve el token al llamador, nunca una respuesta HTTP. |
 | `verificar_token(token: str, settings: Settings) -> ClaimsSesion` | Verifica firma, algoritmo configurado, presencia/tipos y vigencia. Devuelve `{sub, iat, exp, roles}` sin truncar los tiempos. |
 
-Los futuros servicios deben validar las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberar las transacciones durante ese trabajo. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
+Registro/login validan las contraseñas (máximo **72 bytes UTF-8**) antes de bcrypt y liberan las transacciones durante ese trabajo; el futuro cambio de contraseña debe conservar ese límite. El hash ficticio se calcula una sola vez en el lifespan. Los helpers no crean motores, hashes, configuración ni claves al importar.
 
-JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura la cookie del registro, no estas primitivas.
+JWT reutiliza `JWT_SECRET` **fijo**, `JWT_ALGORITHM` y `ACCESS_TOKEN_EXPIRE_SECONDS`; bcrypt reutiliza `BCRYPT_ROUNDS` y `BCRYPT_MAX_CONCURRENCY`. No hay nuevas variables. `COOKIE_SECURE` configura las cookies de registro/login, no estas primitivas.
 
 `TokenInvalido` rechaza tokens con firma/claims inválidos o vencidos con un mensaje humano. `sub` identifica al usuario como entero positivo textual; `roles` es una lista de textos, no una autorización. `iat` y `exp` deben ser números finitos (no cadenas ni booleanos); se comparan sin convertirlos a enteros. No se exige issuer ni audience.
 
@@ -118,25 +118,39 @@ Emitir sólo **después del commit**. `emitido_en` admite fechas con zona horari
 
 Pruebas focalizadas: `test/pytest/auth/test_bcrypt.py` y `test_jwt.py`, con bcrypt/PyJWT reales, límite concurrente, salud disponible y reloj controlado para instantes dentro del mismo segundo.
 
-### Base de intentos para el próximo login (OPSX 4.1)
+### Login limitado y auditado (OPSX 4.2–4.3)
 
-Está disponible la infraestructura de límite/auditoría; **4.2/4.3 siguen pendientes**: no hay `/auth/login`, respuestas 401/429 ni evidencia HTTP C-04/C-05 todavía.
+`POST /auth/login` recibe `{email, password}` sin extras ni normalización del correo; contraseña de hasta 72 bytes UTF-8. No acepta credenciales desde `Authorization`.
+
+| Resultado | Respuesta |
+|---|---|
+| 200 | `{"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}`; bandera del usuario y duración configurada. Cookie con los mismos atributos que registro, sin token/hash en JSON. |
+| 401 | `{"detail":"El correo o la contraseña no son correctos."}` tanto para correo inexistente como contraseña incorrecta. |
+| 401, inactivo con contraseña correcta | `{"detail":"Tu cuenta está desactivada. Comunicate con el taller para reactivarla."}` |
+| 429 | `{"detail":"Demasiados intentos. Volvé a intentar más tarde."}` con `Retry-After`; sin buscar credenciales ni ejecutar bcrypt. |
+| 422 | Formato humano sin eco de entrada, sin bcrypt ni escrituras. |
+
+OpenAPI documenta estos cuatro estados y `Retry-After`. Los rechazos no emiten cookie nueva.
 
 | Interfaz en `app/modules/usuarios/` | Contrato |
 |---|---|
 | `repository.IntentoAccesoRepository.consultar_ventana(email: str, ip: str, ahora: datetime) -> VentanaIntentos` (async) | Una consulta con parámetros ligados devuelve `fallos: int` y `fallo_mas_antiguo: datetime \| None`; `ahora` lleva zona horaria. |
 | `unit_of_work.UnitOfWorkIntentoAcceso(sesion: AsyncSession)` | Expone `intentos`; `add` sólo hace flush. Confirma al salir del bloque; revierte y propaga fallos de operación/flush/commit, sin cerrar la sesión. |
-| `router.get_session_intentos(request)` → `construir_uow_intentos(sesion)` / `UowIntentosDep` | Dependencia separada crea/cierra otra sesión y entrega el UoW **sin abrir** al futuro servicio. No se conecta al registro. |
+| `router.get_session_intentos(request)` → `construir_uow_intentos(sesion)` / `UowIntentosDep` | Dependencia separada crea/cierra otra sesión y entrega el UoW **sin abrir** al servicio de login. No se conecta al registro. |
 
-[D3 / DD-46](knowledge-base/09_decisiones_y_supuestos.md#dd-46--ventana-de-intentos-ej-4-d3): ventana **(ahora − 60 s, ahora]**, sólo fallos posteriores al último éxito del mismo par correo/IP. El historial permanece; las filas bloqueadas guardadas como `exito=false` también cuentan. El próximo servicio decidirá bloqueo con `fallos >= 5` y calculará `Retry-After = max(1, ceil((fallo_mas_antiguo + 60 s - ahora).total_seconds()))`. No promete acceso al vencer ese plazo: debe consultar otra vez, sin bloqueo fijo adicional.
+[D3 / DD-46](knowledge-base/09_decisiones_y_supuestos.md#dd-46--ventana-de-intentos-ej-4-d3): ventana **(ahora − 60 s, ahora]**, sólo fallos posteriores al último éxito del mismo par correo/IP. El historial permanece; las filas bloqueadas guardadas como `exito=false` también cuentan. El servicio decide bloqueo con `fallos >= 5` y calcula `Retry-After = max(1, ceil((fallo_mas_antiguo + 60 s - ahora).total_seconds()))`. No promete acceso al vencer ese plazo: debe consultar otra vez, sin bloqueo fijo adicional.
 
-La excepción transaccional cuesta **otra conexión/transacción** y conserva intentos confirmados aunque la petición normal revierta. No usa tareas de fondo, locks ni garantías globales de concurrencia. El evento del futuro 429 seguirá en el UoW normal, no en el de intentos.
+La excepción transaccional cuesta **otra conexión/transacción** y conserva intentos confirmados aunque la petición normal revierta. No usa tareas de fondo, locks ni garantías globales de concurrencia. El evento «Login bloqueado por demasiados intentos» (actor: correo intentado) se confirma en el UoW normal, después del intento. Si falla ese evento, el intento permanece. El login no bloqueado no duplica su intento como evento.
 
-**Integración pendiente:** la lectura hace autobegin y retiene conexión hasta salir del UoW, aunque `__aenter__` no abra una transacción. El servicio de 4.2 deberá cerrar las fases cortas de lectura antes de bcrypt y abrir después las escrituras, confirmar el intento antes del resultado/rechazo y no emitir cookie si falla la persistencia obligatoria. `test/pytest/auth/test_intentos.py` verifica consulta, independencia, rollback y devolución de conexión sin simular un endpoint.
+El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y conserva sólo primitivas. Precarga roles y filtra los revocados/vencidos para el JWT. Cada resultado válido confirma su intento antes de devolver éxito/401/429; un fallo de persistencia obligatoria no entrega sesión ni cookie.
+
+**Pruebas automatizadas:** `test/pytest/auth/test_login.py` usa HTTP ASGI, PostgreSQL/Alembic, bcrypt real y lecturas independientes: éxito, ambos 401, sexto bloqueo, rollback, validación y OpenAPI. Mide tres verificaciones reales/ficticias por camino, sin umbral absoluto ni esperas artificiales. Incluye bordes de 60 s, intentos futuros excluidos, reset por último éxito sin borrar (también fechas iguales), aislamiento de correo exacto/IP, conteo de nuevos 429, Retry-After mínimo, 72 bytes válidos y JSON/correo inválidos. `test_intentos.py` conserva además la cobertura del repositorio.
+
+**Casos manuales:** `test/auth.http` conserva C-02 y agrega C-04/C-05 con sesiones nombradas, sin cookie jar implícito. Definí `REGISTRO_PASSWORD` y `LOGIN_PASSWORD_INCORRECTA` distintas, de hasta 72 bytes; ejecutá seed sobre la misma base aislada de prueba que usa la API. Corré el archivo en orden, con los seis intentos C-05 dentro de 60 s. Deben quedar nueve intentos (ocho fallidos y uno exitoso), un evento de registro y un evento bloqueado adicionales al seed; ningún intento se borra. **Evidencia de esta unidad:** los 12 bloques C-02/C-04/C-05 se ejecutaron por TCP tras Alembic/seed en bases aisladas. La suite completa y su verificación independiente dieron 531 pruebas aprobadas, ninguna omitida y 18 advertencias conocidas de la clave JWT de test. El diferencial contra `b3a903a` conservó 75 solicitudes por versión y 15 operaciones OpenAPI existentes sin diferencias no solicitadas. Esto verifica registro/login, no las tareas pendientes de identidad, logout, cambio de contraseña o EJ-5.
 
 ## Endpoints
 
-> **Rutas abiertas hasta EJ-5 (T-11):** todavía no hay login; desde EJ-4 se suma `/auth` y desde EJ-5 estos grupos quedan protegidos por roles.
+> **Rutas abiertas hasta EJ-5 (T-11):** registro/login no protegen el CRUD; desde EJ-5 estos grupos quedan protegidos por roles.
 
 ### Salud (públicas siempre)
 
