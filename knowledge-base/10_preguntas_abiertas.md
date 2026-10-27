@@ -58,6 +58,11 @@ Pedido general del usuario registrado en la misma revisión: DD-25 (mensajes de 
 
 Si durante la implementación aparece una duda nueva, se agrega acá con su prioridad (regla D-4 de `AGENTS.md`).
 
+## Contratos complementarios resueltos durante EJ-4
+
+**Duda**: la consigna no fija todas las claves de salida de registro, cambio, logout y yo, ni los nombres del cuerpo del cambio.
+**Resolución**: DD-45 registra el supuesto complementario D1 del diseño aprobado, sus formas JSON y los límites de entrada; no agrega políticas de contraseña/correo ni autorización de EJ-5. Esta unidad sólo implementa contratos/fixtures; las rutas y cookies siguen pendientes. No queda una decisión bloqueante para estos contratos.
+
 ## Discovery (`state.kb.discovery`)
 
 Todos los campos se pudieron inferir con confianza alta desde la consigna, salvo:

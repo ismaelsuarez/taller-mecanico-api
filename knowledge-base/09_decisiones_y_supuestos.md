@@ -217,6 +217,24 @@
 **Decisión**: el proceso del seed crea/cierra la sesión y abre el UoW existente para vaciar y recargar en una única transacción. El hash permanece antes de la transacción. No hay confirmación externa mediante `conexion.begin()`.
 **Justificación**: B-8/DD-19 exige que toda confirmación pase por UoW. Se mantiene la atomicidad e idempotencia ya exigidas; un fallo de recarga revierte también el vaciado.
 
+### DD-45 — Contratos JSON complementarios de autenticación (EJ-4, D1)
+**Decisión del equipo / supuesto complementario**: adoptar las formas propuestas en [D1](../openspec/changes/04-autenticacion/design.md#d1--formas-json-complementarias-propuestas), sin atribuir a la consigna las claves que no fija. Los contratos viven en `app/modules/usuarios/schemas.py`.
+
+| Operación prevista | Entrada | Salida prevista |
+|---|---|---|
+| Registro 201 | `{email, password, nombre, documento, telefono}` | `{"mensaje":"Registro completado","debe_cambiar_password":false,"expira_en_segundos":1800}` |
+| Login 200 | `{email, password}` | `{"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}` |
+| Cambio 200 | `{password_actual, password_nueva}` | `{"mensaje":"Contraseña actualizada","debe_cambiar_password":false,"expira_en_segundos":1800}` |
+| Logout 200 | Sin cuerpo requerido | `{"mensaje":"Sesión cerrada"}` |
+| Yo 200 | Sin cuerpo | `{"usuario":{"id":1,"email":"persona@example.com","nombre":"Persona","debe_cambiar_password":false},"roles_vigentes":["CLIENTE"],"roles_token":["CLIENTE"]}` |
+
+**Límites de entrada**: todos los campos indicados son requeridos, de texto, y los extras se rechazan (`extra="forbid"`, también `rol`). Cada campo destinado a bcrypt acepta como máximo **72 bytes UTF-8**, no caracteres: 72 ASCII / 36 `ñ` se admiten; 73 ASCII / 37 `ñ` se rechazan. No se agregan complejidad, longitud mínima de contraseña ni normalización de correo. El correo conserva sus caracteres (1..255); registro reutiliza `ClienteCrear`: nombre 1..255, documento y teléfono 1..50. El validador nunca copia la contraseña al mensaje; la traducción HTTP segura sigue DD-42.
+
+**Salidas**: `SesionLectura` sirve a registro/login/cambio, `MensajeLectura` a logout e `IdentidadLectura` contiene `UsuarioLectura` y las dos listas de roles. Ninguna proyecta hash ni token. `1800` es sólo un ejemplo: la duración la proveerá la configuración y la bandera de login/yo reflejará al usuario. Los roles vigentes y los emitidos se mantienen separados, aunque difieran.
+
+**Estado de implementación**: esta unidad aporta contratos y fixtures PostgreSQL/Alembic autenticables; no implementa todavía rutas `/auth`, JWT ni emisión de cookies. Los códigos/cuerpos de la tabla son el contrato previsto, no evidencia de endpoints funcionando. El CRUD y `actor_temporal` continúan sin autorización hasta EJ-5.
+**Justificación**: nombres explícitos para cambio/identidad y respuestas sin secretos, coherentes con DD-17; evita inventar otro DTO de CRUD o incluir el JWT en JSON.
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

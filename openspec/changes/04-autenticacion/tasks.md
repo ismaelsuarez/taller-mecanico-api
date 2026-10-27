@@ -1,14 +1,14 @@
 # Tasks
 
-Plan para una futura ejecución de `/opsx:apply 04-autenticacion`. Ninguna casilla representa trabajo ya realizado. Referencias: [spec](specs/autenticacion-sesiones/spec.md) y [diseño](design.md), decisiones D1–D6. Mantener el orden secuencial de los grupos; tests y documentación acompañan cada comportamiento, no se posponen al cierre.
+Ejecución de `/opsx:apply 04-autenticacion`. Las casillas marcadas cuentan con evidencia registrada en `odd/tasks/04-autenticacion.md`; las restantes siguen pendientes. Referencias: [spec](specs/autenticacion-sesiones/spec.md) y [diseño](design.md), decisiones D1–D6. Mantener el orden secuencial de los grupos; tests y documentación acompañan cada comportamiento, no se posponen al cierre.
 
 Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si supera aproximadamente 400 líneas autorales, con tests/docs junto al código. Riesgos de implementación: seguridad (item 2), helpers/contratos compartidos (item 3) y semáforo existente (item 4 cuando se modifique su comportamiento). No agrupar todo EJ-4 en una sola revisión ni afirmar un tamaño exacto antes de ver el diff.
 
 ## 1. Contratos y preparación de pruebas aisladas
 
-- [ ] 1.1 Agregar fixture específica de autenticación sobre PostgreSQL de test con Alembic, hashes reales, roles y secuencias coherentes, sin reemplazar la fixture CRUD; verificar creación consecutiva de usuarios sin colisión y que las pruebas actuales de fixtures/CRUD siguen pasando.
-- [ ] 1.2 Implementar contratos de entrada/salida en `usuarios/schemas.py` conforme spec y D1, con `extra="forbid"` y 72 bytes UTF-8 en registro/login/actual/nueva; observar RED/GREEN para 72/73 bytes ASCII, 36/37 `ñ`, extras, campos ausentes y salida sin hash/token.
-- [ ] 1.3 Documentar las formas JSON propuestas de D1 como decisiones/supuestos del proyecto y límites de entrada; verificar correspondencia entre contratos y documentación, sin agregar complejidad de contraseña, normalización de correo ni requisitos de EJ-5.
+- [x] 1.1 Agregar fixture específica de autenticación sobre PostgreSQL de test con Alembic, hashes reales, roles y secuencias coherentes, sin reemplazar la fixture CRUD; verificar creación consecutiva de usuarios sin colisión y que las pruebas actuales de fixtures/CRUD siguen pasando.
+- [x] 1.2 Implementar contratos de entrada/salida en `usuarios/schemas.py` conforme spec y D1, con `extra="forbid"` y 72 bytes UTF-8 en registro/login/actual/nueva; observar RED/GREEN para 72/73 bytes ASCII, 36/37 `ñ`, extras, campos ausentes y salida sin hash/token.
+- [x] 1.3 Documentar las formas JSON propuestas de D1 como decisiones/supuestos del proyecto y límites de entrada; verificar correspondencia entre contratos y documentación, sin agregar complejidad de contraseña, normalización de correo ni requisitos de EJ-5.
 
 ## 2. Primitivas de seguridad reutilizables
 
