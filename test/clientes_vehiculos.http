@@ -7,9 +7,9 @@
 
 ### C-01 (parte de 422): el parámetro de ruta no es un entero
 # La parte «con sesión iniciada» se completa en EJ-4; este 422 lo produce FastAPI
-# antes de ejecutar el handler.
+# antes de ejecutar el handler. El traductor sólo devuelve mensajes humanos, sin repetir la entrada.
 # Esperado: 422 Unprocessable Entity
-# {"detail": [{"type": "int_parsing", "loc": ["path", "cliente_id"], "msg": "Input should be a valid integer, unable to parse string as an integer", "input": "abc"}]}
+# {"detail": [{"msg": "Ingresá un número entero para el cliente seleccionado."}]}
 GET {{baseUrl}}/clientes/abc
 
 ### Detalle de un cliente con sus vehículos vigentes
@@ -53,8 +53,8 @@ Content-Type: application/json
 ### Cuerpo incompleto: nunca 500 (RN-18)
 # Esperado: 422 Unprocessable Entity
 # {"detail": [
-#   {"type": "missing", "loc": ["body", "documento"], "msg": "Field required", "input": {"nombre": "Sin documento"}},
-#   {"type": "missing", "loc": ["body", "telefono"], "msg": "Field required", "input": {"nombre": "Sin documento"}}
+#   {"msg": "Completá el documento."},
+#   {"msg": "Completá el teléfono."}
 # ]}
 POST {{baseUrl}}/clientes
 Content-Type: application/json

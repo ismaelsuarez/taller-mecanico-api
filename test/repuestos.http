@@ -25,7 +25,7 @@ GET {{baseUrl}}/repuestos?q=freno&size=1&page=2
 
 ### C-16: size fuera del máximo del contrato
 # Esperado: 422 Unprocessable Entity
-# {"detail": [{"type": "less_than_equal", "loc": ["query", "size"], "msg": "Input should be less than or equal to 100", "input": "500", "ctx": {"le": 100}}]}
+# {"detail": [{"msg": "Revisá la cantidad por página: está fuera del rango permitido."}]}
 GET {{baseUrl}}/repuestos?size=500
 
 ### C-18: historial de precios antes de tocarlo (una línea del seed: 8000 → 8500)
@@ -76,7 +76,7 @@ GET {{baseUrl}}/repuestos/1/precios
 ### C-16: el stock no se edita por PATCH
 # `extra="forbid"` rechaza el campo: el stock sólo cambia por el punto único de escritura (RN-14).
 # Esperado: 422 Unprocessable Entity
-# {"detail": [{"type": "extra_forbidden", "loc": ["body", "stock"], "msg": "Extra inputs are not permitted", "input": 5}]}
+# {"detail": [{"msg": "Enviá sólo los datos permitidos para esta operación."}]}
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI
 
 from app.core.config import obtener_settings
 from app.core.database import crear_fabrica_sesiones, crear_motor
-from app.core.errores import registrar_traductores
+from app.core.errores import RespuestaValidacion, registrar_traductores
 from app.core.security import configurar_semaforo_bcrypt, hashear_password
 from app.modules.clientes.router import router as router_clientes
 from app.modules.health.router import router as router_salud
@@ -42,7 +42,11 @@ registrar_traductores(app)
 # El grupo protegido llega en EJ-5 (T-11).
 rutas_abiertas = APIRouter()
 rutas_abiertas.include_router(router_salud)
-rutas_abiertas.include_router(router_clientes)
-rutas_abiertas.include_router(router_repuestos)
+rutas_abiertas.include_router(
+    router_clientes, responses={422: {"model": RespuestaValidacion}}
+)
+rutas_abiertas.include_router(
+    router_repuestos, responses={422: {"model": RespuestaValidacion}}
+)
 
 app.include_router(rutas_abiertas)

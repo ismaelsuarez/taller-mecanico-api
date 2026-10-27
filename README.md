@@ -84,6 +84,16 @@ pytest -rs                          # con el venv activo
 
 Si la base de test no está disponible, los tests que la necesitan se **saltean** con el motivo; antes de cerrar un change tienen que correr con **0 skipped**. Los casos manuales están en `test/*.http` (extensión REST Client de VS Code), con la respuesta esperada en comentarios; **antes de correr cada archivo corré `python seed.py`** (D-3), porque los ids esperados salen del seed.
 
+### Errores de entrada
+
+Los datos inválidos responden **422** con mensajes en español, por ejemplo:
+
+```json
+{"detail": [{"msg": "Completá el documento."}]}
+```
+
+La respuesta no repite los datos enviados ni incluye ubicaciones o códigos internos de validación. Los errores de dominio **404/409** conservan `{"detail": "mensaje"}`; una página inexistente también conserva ese formato textual con estado **422**. OpenAPI describe ambos formatos de 422.
+
 ## Endpoints
 
 > **Rutas abiertas hasta EJ-5 (T-11):** todavía no hay login; desde EJ-4 se suma `/auth` y desde EJ-5 estos grupos quedan protegidos por roles.

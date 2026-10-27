@@ -41,6 +41,12 @@ Los endpoints MUST responder: 201 al crear, 204 al dar de baja, 404 si el recurs
 
 Ninguna entrada inválida MUST terminar en 500 (RN-18): la validación vive en el contrato y los `IntegrityError` de la base se traducen a 409/422 con un mensaje propio en español, nunca texto interno de la base ni trazas (RT-EQ-01, S-9).
 
+Los errores de validación de peticiones MUST responder `{"detail": [{"msg": "mensaje humano"}]}`: mensajes propios en español, sin repetir entrada, ubicaciones técnicas, códigos de validadores ni contexto interno. Los campos o validadores desconocidos MUST usar un mensaje genérico seguro. Los errores de dominio 404/409 y la página inexistente (422 con `detail` textual) MUST conservar su cuerpo. OpenAPI MUST describir estas respuestas reales.
+
+#### Scenario: Campo requerido faltante
+- **WHEN** se envía un cliente sin documento ni teléfono
+- **THEN** responde 422 con `{"detail": [{"msg": "Completá el documento."}, {"msg": "Completá el teléfono."}]}` sin repetir el cuerpo enviado
+
 #### Scenario: Parámetro de ruta no entero
 - **WHEN** se pide `GET /clientes/abc` (o cualquier parámetro de ruta no entero)
 - **THEN** la respuesta es 422 sin ejecutar el handler (RT-PG-07)
