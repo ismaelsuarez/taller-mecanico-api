@@ -6,19 +6,25 @@ Laura y Jorge con sus vehículos, 4 repuestos con movimiento «Stock inicial»,
 Debe ser idempotente: dos corridas dejan el mismo estado.
 """
 
+import ast
 import asyncio
+import inspect
 import subprocess
 import sys
-from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
-
-from conftest import configurar_entorno, leer_variable, requiere_base_de_test
+from conftest import leer_variable, requiere_base_de_test
+from sqlalchemy import MetaData, select, text
+from sqlalchemy.exc import DBAPIError
 
 RAIZ = Path(__file__).resolve().parents[2]
+TABLAS_DEL_SEED = (
+    "estado_orden", "usuario", "asignacion_rol", "cliente", "vehiculo", "repuesto",
+    "orden_trabajo", "item_orden", "historial_estado_orden", "movimiento_stock",
+    "historial_precio_repuesto", "evento_seguridad", "intento_acceso",
+)
 
 
 def _url_test() -> str:
@@ -52,39 +58,100 @@ async def _ejecutar_seed() -> None:
         )
 
 
-@pytest.fixture
-async def base_migrada(configurar_entorno):
-    """Base de test migrada a head, lista para el seed."""
-    requiere_base_de_test()
-    configurar_entorno()
-
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    motor = create_async_engine(_url_test())
-
-    # Migrar a head con Alembic (en thread, porque env.py usa asyncio.run).
-    def _migrar():
-        from alembic import command
-        from alembic.config import Config
-
-        cfg = Config(str(RAIZ / "alembic.ini"))
-        cfg.set_main_option("script_location", str(RAIZ / "migrations"))
-        command.upgrade(cfg, "head")
-
-    await asyncio.to_thread(_migrar)
-
-    yield motor
-
-    async with motor.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE"))
-        await conn.execute(text("CREATE SCHEMA public"))
-    await motor.dispose()
-
-
 async def _consulta(motor, sql: str, **params):
     async with motor.connect() as conn:
         resultado = await conn.execute(text(sql), params)
         return resultado.all()
+
+
+async def _estado_completo(motor):
+    metadata = MetaData()
+    async with motor.connect() as conexion:
+        await conexion.run_sync(lambda conn: metadata.reflect(conn, only=TABLAS_DEL_SEED))
+        estado = {}
+        for nombre in TABLAS_DEL_SEED:
+            tabla = metadata.tables[nombre]
+            consulta = select(tabla).order_by(*tabla.primary_key.columns)
+            estado[nombre] = (await conexion.execute(consulta)).all()
+        return estado
+
+
+@pytest.mark.parametrize("al_confirmar", [False, True], ids=["carga", "commit"])
+async def test_seed_fallido_conserva_datos_e_historiales(base_migrada, al_confirmar):
+    """Falla real de PostgreSQL, tras TRUNCATE y recarga, sin mocks de la base."""
+    from seed import sembrar
+
+    await sembrar()
+    async with base_migrada.begin() as conn:
+        await conn.execute(text("UPDATE cliente SET nombre = 'Nombre conservado' WHERE id = 1"))
+        await conn.execute(text("""
+            CREATE FUNCTION rechazar_seed_de_test() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'Fallo de recarga de prueba';
+            END;
+            $$ LANGUAGE plpgsql
+        """))
+        if al_confirmar:
+            await conn.execute(text("""
+                CREATE CONSTRAINT TRIGGER rechazar_seed_de_test
+                AFTER INSERT ON evento_seguridad DEFERRABLE INITIALLY DEFERRED
+                FOR EACH ROW EXECUTE FUNCTION rechazar_seed_de_test()
+            """))
+        else:
+            await conn.execute(text("""
+                CREATE TRIGGER rechazar_seed_de_test BEFORE INSERT ON evento_seguridad
+                FOR EACH ROW EXECUTE FUNCTION rechazar_seed_de_test()
+            """))
+    antes = await _estado_completo(base_migrada)
+    with pytest.raises(DBAPIError, match="Fallo de recarga de prueba"):
+        await sembrar()
+    assert await _estado_completo(base_migrada) == antes
+    # La recarga fallida tampoco debe dejar adelantada la secuencia del cliente.
+    async with base_migrada.begin() as conn:
+        identificador = await conn.execute(text(
+            "INSERT INTO cliente (nombre, documento, telefono) "
+            "VALUES ('Cliente posterior', 'DNI-POSTERIOR', '111') RETURNING id"
+        ))
+        assert identificador.scalar_one() == 3
+
+
+def test_seed_confirma_solo_por_el_uow_existente():
+    """S4 es arquitectónico: ambas implementaciones pueden ser atómicas.
+
+    Esta comprobación estructural complementa la integración real, no pretende
+    demostrar una pérdida de atomicidad en el seed anterior.
+    """
+    import seed
+    from app.core.unit_of_work import UnitOfWork
+
+    arbol = ast.parse(inspect.getsource(seed.sembrar))
+    bloques = [
+        nodo for nodo in ast.walk(arbol)
+        if isinstance(nodo, ast.AsyncWith)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and isinstance(item.context_expr.func, ast.Name)
+            and item.context_expr.func.id == "UnitOfWork"
+            for item in nodo.items
+        )
+    ]
+    assert len(bloques) == 1, "El seed debe abrir un único UnitOfWork para vaciar y recargar."
+    assert seed.UnitOfWork is UnitOfWork
+    llamadas = [nodo.func for nodo in ast.walk(bloques[0]) if isinstance(nodo, ast.Call)]
+    assert {"_vaciar", "_cargar"} <= {
+        funcion.id for funcion in llamadas if isinstance(funcion, ast.Name)
+    }
+    assert not any(
+        isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)
+        and nodo.func.attr in {"commit", "begin"}
+        for nodo in ast.walk(arbol)
+    ), "El seed no debe confirmar mediante una sesión o conexión fuera del UoW."
+    hashes = [
+        nodo for nodo in ast.walk(arbol)
+        if isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+        and nodo.func.id == "_hashear"
+    ]
+    assert hashes and all(nodo.lineno < bloques[0].lineno for nodo in hashes)
 
 
 @pytest.mark.asyncio
@@ -235,27 +302,22 @@ class TestSeed:
         assert evento and "datos iniciales" in evento[0][1].lower()
 
     async def test_idempotente_dos_corridas(self, base_migrada):
+        async def estado_logico():
+            # Sólo cambian las marcas de ejecución y las sales aleatorias de bcrypt.
+            variables = {"password_hash", "cuando", "creada_en", "desde"}
+            estado = await _estado_completo(base_migrada)
+            return {
+                tabla: [
+                    {clave: valor for clave, valor in fila._mapping.items() if clave not in variables}
+                    for fila in filas
+                ]
+                for tabla, filas in estado.items()
+            }
+
         await _ejecutar_seed()
-        estado_1 = await _consulta(
-            base_migrada,
-            "SELECT (SELECT count(*) FROM usuario), (SELECT count(*) FROM cliente), "
-            "(SELECT count(*) FROM vehiculo), (SELECT count(*) FROM repuesto), "
-            "(SELECT count(*) FROM orden_trabajo), (SELECT count(*) FROM item_orden), "
-            "(SELECT count(*) FROM historial_estado_orden), (SELECT count(*) FROM movimiento_stock), "
-            "(SELECT count(*) FROM historial_precio_repuesto), (SELECT count(*) FROM estado_orden), "
-            "(SELECT count(*) FROM evento_seguridad)",
-        )
+        estado_1 = await estado_logico()
         await _ejecutar_seed()
-        estado_2 = await _consulta(
-            base_migrada,
-            "SELECT (SELECT count(*) FROM usuario), (SELECT count(*) FROM cliente), "
-            "(SELECT count(*) FROM vehiculo), (SELECT count(*) FROM repuesto), "
-            "(SELECT count(*) FROM orden_trabajo), (SELECT count(*) FROM item_orden), "
-            "(SELECT count(*) FROM historial_estado_orden), (SELECT count(*) FROM movimiento_stock), "
-            "(SELECT count(*) FROM historial_precio_repuesto), (SELECT count(*) FROM estado_orden), "
-            "(SELECT count(*) FROM evento_seguridad)",
-        )
-        assert estado_1 == estado_2, f"El seed no es idempotente: {estado_1} != {estado_2}"
+        assert await estado_logico() == estado_1
 
     async def test_seed_sin_tablas_da_mensaje_claro(self, configurar_entorno):
         """Sin migrar, el seed debe informar que falta migrar, no un traceback crudo."""

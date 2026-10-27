@@ -13,17 +13,11 @@ son datos de prueba para poder loguearse en desarrollo; no son credenciales real
 import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
-from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-# Importar todos los modelos para registrarlos en el metadata (por si se usa create_all en tests).
-from app.modules.clientes import models as _models_clientes  # noqa: F401
-from app.modules.ordenes import models as _models_ordenes  # noqa: F401
-from app.modules.repuestos import models as _models_repuestos  # noqa: F401
-from app.modules.usuarios import models as _models_usuarios  # noqa: F401
+from app.core.unit_of_work import UnitOfWork
 
 # ---------------------------------------------------------------------------
 # Contraseñas de prueba — SOLO ACÁ, nunca en configuración ni en el repo (S-6).
@@ -294,15 +288,12 @@ async def sembrar() -> None:
         for email, password in emails_con_password.items():
             hashes[email] = await _hashear(password, settings.bcrypt_rounds)
 
-        # Vaciar y recargar en una sola transacción.
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        async with motor.connect() as conexion:
-            async with conexion.begin():
-                sesion = AsyncSession(bind=conexion)
-                await _vaciar(sesion)
-                await _cargar(sesion, hashes)
-                await sesion.flush()
+        # El seed es dueño de la sesión; sólo el UoW confirma la recarga (B-8).
+        # El contexto externo cierra la sesión también si falla el commit.
+        async with AsyncSession(motor) as sesion, UnitOfWork(sesion):
+            await _vaciar(sesion)
+            await _cargar(sesion, hashes)
+            await sesion.flush()
 
         print("Seed aplicado: la base quedó en el estado inicial conocido.")
     finally:

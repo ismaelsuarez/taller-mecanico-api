@@ -17,6 +17,14 @@ Define el script `seed.py` como parte de la puesta en marcha: vacía las tablas 
 - **WHEN** se ejecuta `python seed.py` sobre una base sin las tablas
 - **THEN** el script informa claramente que falta migrar (no un traceback crudo)
 
+### Requirement: Recarga atómica mediante Unit of Work
+
+El seed MUST confirmar el vaciado y la recarga mediante el Unit of Work existente (B-8/DD-19), con una sesión creada y cerrada por quien lo invoca. El hash de contraseñas MUST calcularse antes de abrir la transacción. Ante un fallo durante la recarga, el UoW MUST revertir los cambios y conservar los datos anteriores.
+
+#### Scenario: Fallo durante la recarga
+- **WHEN** una escritura de la recarga falla después del vaciado
+- **THEN** se revierte toda la transacción y se conserva el estado anterior
+
 ### Requirement: Catálogo de estados cargado primero
 
 El seed MUST cargar primero la tabla `estado_orden` con `PENDIENTE` (posición 1), `EN_REPARACION` (2), `TERMINADA` (3, final) y `CANCELADA` (4, final), cada uno con su descripción, antes que cualquier orden de trabajo.

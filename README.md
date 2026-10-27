@@ -73,7 +73,7 @@ Para recrear la base de test (borra los datos locales de desarrollo):
 docker compose down -v && docker compose up -d
 ```
 
-`seed.py` es **idempotente**: correrlo dos veces deja el mismo estado. Vacía las tablas con `TRUNCATE` y recarga: catálogo de estados (PENDIENTE, EN_REPARACION, TERMINADA, CANCELADA), 7 usuarios con sus roles, Laura y Jorge con sus vehículos, 4 repuestos con su movimiento «Stock inicial», 2 órdenes de trabajo con sus historiales, el historial de precios del filtro y un evento de seguridad con actor `SISTEMA`. Al final **sincroniza las secuencias de id** con los ids que sembró (DD-38): sin ese paso, el primer alta de la API chocaría con un id ya ocupado. Las contraseñas de prueba viven **sólo** en `seed.py` (no son credenciales reales).
+`seed.py` es **idempotente**: correrlo dos veces deja el mismo estado. El vaciado y la recarga se confirman en un único **Unit of Work**; si falla la carga o el commit, se revierte toda la operación. El seed crea y cierra la sesión, y calcula los hashes antes de abrir la transacción. Vacía las tablas con `TRUNCATE` y recarga: catálogo de estados (PENDIENTE, EN_REPARACION, TERMINADA, CANCELADA), 7 usuarios con sus roles, Laura y Jorge con sus vehículos, 4 repuestos con su movimiento «Stock inicial», 2 órdenes de trabajo con sus historiales, el historial de precios del filtro y un evento de seguridad con actor `SISTEMA`. Al final **sincroniza las secuencias de id** con los ids que sembró (DD-38): sin ese paso, el primer alta de la API chocaría con un id ya ocupado. Las contraseñas de prueba viven **sólo** en `seed.py` (no son credenciales reales).
 
 ### 4. Tests
 
@@ -81,6 +81,8 @@ docker compose down -v && docker compose up -d
 docker compose up -d db             # los tests usan una PostgreSQL real (base POSTGRES_TEST_DB)
 pytest -rs                          # con el venv activo
 ```
+
+Las fixtures de integración aplican **Alembic hasta `head`**, incluidos los tres disparadores de sólo agregado; no crean tablas con `create_all`. Reconstruyen el esquema entre pruebas: usá una `POSTGRES_TEST_DB` exclusiva y distinta de desarrollo. La fixture migrada verifica que la conexión apunte a la base de test asignada antes de limpiar.
 
 Si la base de test no está disponible, los tests que la necesitan se **saltean** con el motivo; antes de cerrar un change tienen que correr con **0 skipped**. Los casos manuales están en `test/*.http` (extensión REST Client de VS Code), con la respuesta esperada en comentarios; **antes de correr cada archivo corré `python seed.py`** (D-3), porque los ids esperados salen del seed.
 
