@@ -118,6 +118,22 @@ Emitir sólo **después del commit**. `emitido_en` admite fechas con zona horari
 
 Pruebas focalizadas: `test/pytest/auth/test_bcrypt.py` y `test_jwt.py`, con bcrypt/PyJWT reales, límite concurrente, salud disponible y reloj controlado para instantes dentro del mismo segundo.
 
+### Base de intentos para el próximo login (OPSX 4.1)
+
+Está disponible la infraestructura de límite/auditoría; **4.2/4.3 siguen pendientes**: no hay `/auth/login`, respuestas 401/429 ni evidencia HTTP C-04/C-05 todavía.
+
+| Interfaz en `app/modules/usuarios/` | Contrato |
+|---|---|
+| `repository.IntentoAccesoRepository.consultar_ventana(email: str, ip: str, ahora: datetime) -> VentanaIntentos` (async) | Una consulta con parámetros ligados devuelve `fallos: int` y `fallo_mas_antiguo: datetime \| None`; `ahora` lleva zona horaria. |
+| `unit_of_work.UnitOfWorkIntentoAcceso(sesion: AsyncSession)` | Expone `intentos`; `add` sólo hace flush. Confirma al salir del bloque; revierte y propaga fallos de operación/flush/commit, sin cerrar la sesión. |
+| `router.get_session_intentos(request)` → `construir_uow_intentos(sesion)` / `UowIntentosDep` | Dependencia separada crea/cierra otra sesión y entrega el UoW **sin abrir** al futuro servicio. No se conecta al registro. |
+
+[D3 / DD-46](knowledge-base/09_decisiones_y_supuestos.md#dd-46--ventana-de-intentos-ej-4-d3): ventana **(ahora − 60 s, ahora]**, sólo fallos posteriores al último éxito del mismo par correo/IP. El historial permanece; las filas bloqueadas guardadas como `exito=false` también cuentan. El próximo servicio decidirá bloqueo con `fallos >= 5` y calculará `Retry-After = max(1, ceil((fallo_mas_antiguo + 60 s - ahora).total_seconds()))`. No promete acceso al vencer ese plazo: debe consultar otra vez, sin bloqueo fijo adicional.
+
+La excepción transaccional cuesta **otra conexión/transacción** y conserva intentos confirmados aunque la petición normal revierta. No usa tareas de fondo, locks ni garantías globales de concurrencia. El evento del futuro 429 seguirá en el UoW normal, no en el de intentos.
+
+**Integración pendiente:** la lectura hace autobegin y retiene conexión hasta salir del UoW, aunque `__aenter__` no abra una transacción. El servicio de 4.2 deberá cerrar las fases cortas de lectura antes de bcrypt y abrir después las escrituras, confirmar el intento antes del resultado/rechazo y no emitir cookie si falla la persistencia obligatoria. `test/pytest/auth/test_intentos.py` verifica consulta, independencia, rollback y devolución de conexión sin simular un endpoint.
+
 ## Endpoints
 
 > **Rutas abiertas hasta EJ-5 (T-11):** todavía no hay login; desde EJ-4 se suma `/auth` y desde EJ-5 estos grupos quedan protegidos por roles.

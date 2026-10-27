@@ -235,6 +235,15 @@
 **Estado de implementación**: esta unidad aporta contratos y fixtures PostgreSQL/Alembic autenticables; no implementa todavía rutas `/auth`, JWT ni emisión de cookies. Los códigos/cuerpos de la tabla son el contrato previsto, no evidencia de endpoints funcionando. El CRUD y `actor_temporal` continúan sin autorización hasta EJ-5.
 **Justificación**: nombres explícitos para cambio/identidad y respuestas sin secretos, coherentes con DD-17; evita inventar otro DTO de CRUD o incluir el JWT en JSON.
 
+### DD-46 — Ventana de intentos (EJ-4, D3)
+**Decisión del equipo / detalle complementario aprobado**: aplicar [D3](../openspec/changes/04-autenticacion/design.md#d3--intentos-independientes-y-límite-de-login), que precisa RN-08/SU-10 sin atribuir sus bordes a la consigna. Una consulta obtiene cantidad y fecha mínima de fallos del par exacto `(email, ip)` en **(ahora − 60 s, ahora]**, estrictamente posteriores a su último éxito no futuro. No normaliza el correo ni elimina filas; un éxito con la misma fecha excluye el fallo de esa fecha.
+
+**Bloqueo previsto en login**: con cinco o más fallos, no verificar credenciales. `Retry-After = max(1, ceil(segundos hasta que salga el fallo vigente más antiguo))`; una petición posterior reevalúa el conteo. Los resultados bloqueados se guardan como `exito=false` y cuentan igual que los otros fallos: el encabezado no garantiza acceso ni crea un plazo fijo nuevo.
+
+**Persistencia**: el router entrega `UnitOfWorkIntentoAcceso` sin abrir mediante una dependencia que crea/cierra una sesión distinta. Sólo ese UoW confirma los intentos. Cuesta otra conexión/transacción y sus filas confirmadas sobreviven al rollback normal (DD-05/19); fallar la propia escritura/confirmación revierte y propaga el error. El evento del 429 pertenece al UoW normal; no se generaliza la excepción a eventos ni se usan tareas de fondo.
+
+**Estado de esta unidad**: OPSX4.1 implementa consulta y UoW/dependencias, probados con PostgreSQL/Alembic por sus interfaces públicas. 4.2/4.3 siguen pendientes: integración del servicio/login, umbral previo a bcrypt, Retry-After HTTP, evento bloqueado, 401/429 y C-04/C-05. Las lecturas disparan autobegin: cerrar su fase con UoW para liberar la conexión antes de bcrypt; la dependencia conserva la propiedad de la sesión. No hay garantía global frente a logins concurrentes, locks, Redis, migraciones ni cambios de configuración.
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

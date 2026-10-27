@@ -1,15 +1,17 @@
 """Registro público; la respuesta de sesión se emite sólo tras confirmar el UoW."""
 
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.database import SesionDep
 from app.core.security import emitir_token
 from app.modules.usuarios import service
 from app.modules.usuarios.schemas import RegistroEntrada, SesionLectura
-from app.modules.usuarios.unit_of_work import UnitOfWorkUsuario
+from app.modules.usuarios.unit_of_work import UnitOfWorkIntentoAcceso, UnitOfWorkUsuario
 
 router = APIRouter(prefix="/auth", tags=["autenticación"])
 
@@ -19,6 +21,25 @@ def construir_uow(sesion: SesionDep) -> UnitOfWorkUsuario:
 
 
 UowUsuarioDep = Annotated[UnitOfWorkUsuario, Depends(construir_uow)]
+
+
+async def get_session_intentos(request: Request) -> AsyncIterator[AsyncSession]:
+    # DD-19: otra sesión/transacción y una conexión adicional al consultar/escribir.
+    # Sus intentos confirmados sobreviven al rollback de la petición normal.
+    # Esta dependencia crea/cierra la sesión; el UoW nunca la cierra.
+    async with request.app.state.fabrica_sesiones() as sesion:
+        yield sesion
+
+
+SesionIntentosDep = Annotated[AsyncSession, Depends(get_session_intentos)]
+
+
+def construir_uow_intentos(sesion: SesionIntentosDep) -> UnitOfWorkIntentoAcceso:
+    """Se entrega sin abrir; el servicio futuro lo abre en fases cortas."""
+    return UnitOfWorkIntentoAcceso(sesion)
+
+
+UowIntentosDep = Annotated[UnitOfWorkIntentoAcceso, Depends(construir_uow_intentos)]
 
 
 def poner_cookie_sesion(
