@@ -49,6 +49,22 @@ Define el catálogo de repuestos: listado y detalle, alta con stock inicial, cam
 - **WHEN** se envía `PATCH /repuestos/{id}` con sólo `descripcion`
 - **THEN** cambia la descripción, el precio queda intacto y no hay línea de historial
 
+### Requirement: Límites numéricos representables
+
+Los contratos de alta y actualización MUST aceptar precios positivos representables exactamente con hasta ocho dígitos enteros y dos decimales (`NUMERIC(10,2)`), sin redondear silenciosamente. `stock_inicial` MUST estar entre 0 y 2147483647 y la cantidad de reposición entre 1 y 2147483647. Una entrada fuera de esos límites MUST responder 422 sin modificar el repuesto ni sus historiales.
+
+#### Scenario: Precios no representables
+- **WHEN** se envía un precio `"0.001"` o `"100000000"` al alta o PATCH
+- **THEN** la respuesta es 422 y no se crea ni modifica el repuesto ni su historial de precios
+
+#### Scenario: Cantidad fuera de rango
+- **WHEN** se envía `2147483648` como stock inicial o cantidad de reposición
+- **THEN** la respuesta es 422 y no cambia ningún repuesto ni movimiento
+
+#### Scenario: Reposición supera el stock máximo
+- **WHEN** la cantidad solicitada es válida pero sumada al stock guardado supera 2147483647
+- **THEN** la respuesta es 409 con mensaje propio y no cambian stock ni movimientos
+
 ### Requirement: Borrado lógico de repuesto
 
 `DELETE /repuestos/{id}` MUST responder 204 **siempre** que el repuesto exista y esté vigente, aunque esté en órdenes abiertas (DD-21, RT-EQ-02); ya dado de baja MUST responder 404 (DD-22); inexistente MUST responder 404. Los datos se conservan (RN-16).

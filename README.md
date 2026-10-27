@@ -113,9 +113,11 @@ Si la base de test no está disponible, los tests que la necesitan se **saltean*
 | GET | `/repuestos/{id}` | Detalle: 200 / 404 |
 | PATCH | `/repuestos/{id}` | Parcial de `descripcion` y/o `precio` con línea de historial: 200 / 404 / 422 |
 | DELETE | `/repuestos/{id}` | Baja lógica: 204 siempre que esté vigente; 404 si ya baja o no existe |
-| POST | `/repuestos/{id}/reponer` | Reposición de stock: 200 / 404 / 422 |
+| POST | `/repuestos/{id}/reponer` | Reposición de stock: 200 / 404 / 409 (supera el máximo de existencias) / 422 |
 | GET | `/repuestos/{id}/movimientos` | Movimientos de stock en orden cronológico: 200 / 404 |
 | GET | `/repuestos/{id}/precios` | Historial de precios en orden cronológico: 200 / 404 |
+
+Los precios del alta y PATCH admiten valores exactos entre **0.01 y 99999999.99**, con hasta dos decimales significativos: no se redondean entradas como `0.001`. Los ceros finales equivalentes (`12.3400`) sí se admiten. `stock_inicial` va de **0 a 2147483647** y la cantidad de reposición de **1 a 2147483647**. Fuera de esos límites se responde **422**, sin escrituras; si una cantidad válida sumada al stock actual supera el máximo, se responde **409** sin modificar stock ni movimientos.
 
 Todos los listados devuelven el envoltorio `{items, total, page, size, pages}`; `size` va de 1 a 100 (20 por defecto) y una página fuera de rango responde 422 con el mensaje «La página N no existe: hay M».
 

@@ -17,6 +17,7 @@ from app.core.errores import EnConflicto, NoEncontrado
 from app.core.paginacion import Pagina, pagina
 from app.modules.repuestos.models import Repuesto
 from app.modules.repuestos.schemas import (
+    MAXIMO_STOCK,
     MovimientoLectura,
     PrecioLectura,
     RepuestoActualizar,
@@ -105,6 +106,8 @@ async def reponer_repuesto(
         repuesto = await uow.repuestos.get_by_id(repuesto_id)
         if repuesto is None:
             raise NoEncontrado("Repuesto no encontrado.")
+        if repuesto.stock + datos.cantidad > MAXIMO_STOCK:
+            raise EnConflicto("La reposición supera el máximo de existencias permitido.")
         await uow.repuestos.registrar_movimiento(
             repuesto, datos.cantidad, datos.motivo, actor.id
         )

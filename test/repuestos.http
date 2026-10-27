@@ -83,3 +83,84 @@ Content-Type: application/json
 {
   "stock": 5
 }
+
+### RN-18 / S1: precio con fracción menor al centavo
+# Esperado: 422 Unprocessable Entity, sin cambiar descripción, precio ni historial.
+PATCH {{baseUrl}}/repuestos/1
+Content-Type: application/json
+
+{
+  "descripcion": "No debe guardarse",
+  "precio": "0.001"
+}
+
+### RN-18 / S1: precio con más de ocho cifras enteras
+# Esperado: 422 Unprocessable Entity, sin cambiar el repuesto ni su historial.
+PATCH {{baseUrl}}/repuestos/1
+Content-Type: application/json
+
+{
+  "precio": "100000000"
+}
+
+### RN-18 / S1: stock inicial mayor al máximo representable
+# Esperado: 422 Unprocessable Entity, sin crear repuesto ni movimiento.
+POST {{baseUrl}}/repuestos
+Content-Type: application/json
+
+{
+  "codigo": "LIM-INVALIDO",
+  "descripcion": "No debe guardarse",
+  "precio": "12.50",
+  "stock_inicial": 2147483648
+}
+
+### RN-18 / S1: cantidad de reposición mayor al máximo representable
+# Esperado: 422 Unprocessable Entity, stock 10 y movimientos sin cambios.
+POST {{baseUrl}}/repuestos/1/reponer
+Content-Type: application/json
+
+{
+  "cantidad": 2147483648
+}
+
+### RN-18 / S1: alta válida cerca del límite de existencias y con precio máximo
+# Esperado: 201 Created, precio "99999999.99", stock 2147483646.
+# Deja un solo movimiento «Stock inicial», cantidad 2147483646.
+# @name repuestoLimite
+POST {{baseUrl}}/repuestos
+Content-Type: application/json
+
+{
+  "codigo": "LIM-MAXIMO",
+  "descripcion": "Repuesto para comprobar límites",
+  "precio": "99999999.99",
+  "stock_inicial": 2147483646
+}
+
+### RN-14 / S1: alcanzar exactamente el máximo de existencias
+# Esperado: 200 OK, stock 2147483647 y un nuevo movimiento de cantidad 1.
+POST {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/reponer
+Content-Type: application/json
+
+{
+  "cantidad": 1
+}
+
+### RN-18 / S1: cantidad válida que desbordaría las existencias acumuladas
+# Esperado: 409 Conflict, stock y movimientos sin cambios.
+# {"detail": "La reposición supera el máximo de existencias permitido."}
+POST {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/reponer
+Content-Type: application/json
+
+{
+  "cantidad": 1
+}
+
+### RN-14 / S1: el rechazo no cambió las existencias
+# Esperado: 200 OK, precio "99999999.99", stock 2147483647.
+GET {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}
+
+### RN-14 / S1: el rechazo no agregó un movimiento
+# Esperado: 200 OK, exactamente dos movimientos: 2147483646 y 1, en ese orden.
+GET {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/movimientos

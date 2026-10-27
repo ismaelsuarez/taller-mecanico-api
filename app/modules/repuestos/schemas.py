@@ -3,7 +3,9 @@
 Entrada separada de los modelos de tabla con `extra="forbid"` (RT-PG-01, S-4):
 el stock no se edita por PATCH — el alta recibe `stock_inicial` y la reposición
 `cantidad`, ambas pasan por el punto único de escritura (RN-14). Dinero siempre
-`Decimal`, nunca `float` (S-1). Salidas sin `password_hash` (RT-PG-02).
+`Decimal`, nunca `float` (S-1): positivo, finito y representable en NUMERIC(10,2)
+sin redondeo; los ceros decimales finales no alteran su valor. Las cantidades
+respetan el máximo INTEGER. Salidas sin `password_hash` (RT-PG-02).
 """
 
 from datetime import datetime
@@ -11,14 +13,19 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# INTEGER de PostgreSQL: existencias y movimientos positivos representables.
+MAXIMO_STOCK = 2_147_483_647
+
 
 class RepuestoCrear(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     codigo: str = Field(min_length=1, max_length=50)
     descripcion: str = Field(min_length=1, max_length=255)
-    precio: Decimal = Field(gt=0)
-    stock_inicial: int = Field(default=0, ge=0)
+    precio: Decimal = Field(
+        gt=0, max_digits=10, decimal_places=2, allow_inf_nan=False
+    )
+    stock_inicial: int = Field(default=0, ge=0, le=MAXIMO_STOCK)
 
 
 class RepuestoActualizar(BaseModel):
@@ -27,7 +34,9 @@ class RepuestoActualizar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     descripcion: str | None = Field(default=None, min_length=1, max_length=255)
-    precio: Decimal | None = Field(default=None, gt=0)
+    precio: Decimal | None = Field(
+        default=None, gt=0, max_digits=10, decimal_places=2, allow_inf_nan=False
+    )
 
     @model_validator(mode="after")
     def _rechaza_nulos_explícitos(self) -> "RepuestoActualizar":
@@ -41,7 +50,7 @@ class RepuestoActualizar(BaseModel):
 class RepuestoReponer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    cantidad: int = Field(gt=0)
+    cantidad: int = Field(gt=0, le=MAXIMO_STOCK)
     motivo: str = Field(default="Reposición", min_length=1, max_length=120)
 
 
