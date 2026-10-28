@@ -56,6 +56,14 @@
       "sessions": 11,
       "memories": 35,
       "prompts": 7
+    },
+    {
+      "id": "2de67bf6",
+      "created_by": "devops",
+      "created_at": "2026-10-28T00:50:19.828360498Z",
+      "sessions": 26,
+      "memories": 111,
+      "prompts": 22
     }
   ]
 }
