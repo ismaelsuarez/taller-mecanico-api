@@ -96,7 +96,7 @@ Los datos inválidos responden **422** con mensajes en español, por ejemplo:
 
 La respuesta no repite los datos enviados ni incluye ubicaciones o códigos internos de validación. Los errores de dominio **404/409** conservan `{"detail": "mensaje"}`; una página inexistente también conserva ese formato textual con estado **422**. OpenAPI describe ambos formatos de 422.
 
-## Primitivas de autenticación (EJ-4 en curso)
+## Primitivas de autenticación (EJ-4)
 
 `app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo`, `POST /auth/logout` y `POST /auth/cambiar-password`**. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
 
@@ -157,7 +157,7 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 
 `test_identidad.py`/`test_logout.py` verifican HTTP ASGI y PostgreSQL/Alembic reales: claims, estado actual, frontera ±1 microsegundo, roles cambiados, eliminación y ausencia de escrituras. Focalizadas T5 + expectativa OpenAPI previa: **33 aprobadas, 0 omitidas**. La suite completa y la ejecución host solicitada por el verificador independiente dieron **563 aprobadas, 0 omitidas y 76 advertencias conocidas** de la clave JWT de fixture. Los **22 bloques TCP** pasaron tras Alembic/seed en bases aisladas. El diferencial contra `9cb3f16` conservó 15 solicitudes por versión a los tres consumidores de `actor_temporal`, con códigos, cuerpos, encabezados y efectos auditados equivalentes. Sólo normaliza fechas previamente validadas; compara stderr bajo el mismo formato sin frames de traceback. El dictamen independiente cubre T5, no cambio de contraseña, EJ-5 ni cierre global de EJ-4.
 
-`test/auth.http` agrega C-01/C-03 y yo/logout (22 bloques en total), conservando C-02/C-04/C-05. Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
+`test/auth.http` conserva C-01/C-03 y yo/logout junto con C-02/C-04/C-05 y C-09 parcial (28 bloques en total). Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
 
 ### Cambio de contraseña (OPSX 6.1–6.3)
 

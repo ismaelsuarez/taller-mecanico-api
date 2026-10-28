@@ -42,10 +42,10 @@ Unidades previstas: un grupo funcional por unidad revisable, subdividiendo si su
 
 ## 7. Verificación integrada y preparación del relevo
 
-- [ ] 7.1 Ejecutar suite pytest completa sobre PostgreSQL aislada con esquema migrado y todos los ejemplos de `test/auth.http` tras seed; comprobar C-01..C-05 y C-09 parcial, sin saltados, preservando salud/CRUD/seed y registrando resultados reales, no sólo existencia de tests.
-- [ ] 7.2 Ejecutar una comparación diferencial de las superficies ajenas que compartan helpers modificados contra la base previa, verificando códigos, cuerpos y encabezados relevantes; corregir cualquier diferencia no pedida y fijarla con regresión, sin introducir dependencia de Git en tests versionados.
-- [ ] 7.3 Obtener verificación independiente por riesgos de seguridad y código compartido, revisar los deltas con las reglas nativas vigentes y comprobar ausencia de secretos, tokens en cuerpos, lectura de Authorization, commits fuera de UoW y conexión retenida durante bcrypt; registrar aprobación, fallos o bloqueos sin inventar evidencia.
-- [ ] 7.4 Validar el change con OpenSpec y conciliar spec/diseño/tasks, README, OpenAPI, ejemplos y decisiones KB ya actualizados por cada grupo; comprobar el handoff EJ-4 sin marcar EJ-5 iniciado. Repetir ciclo Alembic up/down/up sólo si surgió un cambio de esquema autorizado; no ejecutar limpiezas sobre desarrollo.
+- [x] 7.1 Ejecutar suite pytest completa sobre PostgreSQL aislada con esquema migrado y todos los ejemplos de `test/auth.http` tras seed; comprobar C-01..C-05 y C-09 parcial, sin saltados, preservando salud/CRUD/seed y registrando resultados reales, no sólo existencia de tests.
+- [x] 7.2 Ejecutar una comparación diferencial de las superficies ajenas que compartan helpers modificados contra la base previa, verificando códigos, cuerpos y encabezados relevantes; corregir cualquier diferencia no pedida y fijarla con regresión, sin introducir dependencia de Git en tests versionados.
+- [x] 7.3 Obtener verificación independiente por riesgos de seguridad y código compartido, revisar los deltas con las reglas nativas vigentes y comprobar ausencia de secretos, tokens en cuerpos, lectura de Authorization, commits fuera de UoW y conexión retenida durante bcrypt; registrar aprobación, fallos o bloqueos sin inventar evidencia.
+- [x] 7.4 Validar el change con OpenSpec y conciliar spec/diseño/tasks, README, OpenAPI, ejemplos y decisiones KB ya actualizados por cada grupo; comprobar el handoff EJ-4 sin marcar EJ-5 iniciado. Repetir ciclo Alembic up/down/up sólo si surgió un cambio de esquema autorizado; no ejecutar limpiezas sobre desarrollo.
 
 ## Workflow follow-up
 
