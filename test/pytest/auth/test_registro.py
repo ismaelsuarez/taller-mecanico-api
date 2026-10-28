@@ -123,10 +123,18 @@ async def test_registro_confirma_todo_antes_de_emitir_cookie(
 
 @pytest.mark.parametrize("colision", ["email", "documento", "sin_usuario"])
 async def test_conflictos_no_se_apropian_de_fichas_ni_dejan_filas(
-    api_auth, aplicacion_auth, datos_registro, colision,
+    api_auth, aplicacion_auth, datos_registro, crear_usuario_auth, colision,
 ):
     if colision == "sin_usuario":
+        # EJ-5: /clientes exige rol de personal; la ficha se da de alta con sesión admin.
         ficha = {k: datos_registro[k] for k in ("nombre", "documento", "telefono")}
+        admin, password = await crear_usuario_auth(
+            email="admin-fichas@example.com", roles=("ADMIN",),
+        )
+        login = await api_auth.post(
+            "/auth/login", json={"email": admin.email, "password": password},
+        )
+        assert login.status_code == 200, login.text
         assert (await api_auth.post("/clientes", json=ficha)).status_code == 201
     else:
         assert (await api_auth.post("/auth/registro", json=datos_registro)).status_code == 201

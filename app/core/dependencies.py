@@ -1,39 +1,21 @@
-"""Dependencias compartidas: usuario actual, roles y el actor temporal (T-4).
+"""Dependencias compartidas: identidad, rol por petición y el cambio obligatorio.
 
-`actor_temporal` es TEMPORAL hasta EJ-5 (T-4): como el login llega en EJ-4 y
-`movimiento_stock.usuario_id` / `historial_precio_repuesto.usuario_id` son NOT
-NULL, las escrituras de auditoría del EJ-3 se firman con el admin sembrado por
-`seed.py`. En EJ-5 se reemplaza por `get_usuario_actual` y este grupo de rutas
-pasa a estar protegido con `requiere_rol`.
+Controles y su orden (D2):
+1. `get_usuario_actual` — identidad por cookie; cualquier fallo → 401.
+2. `cambio_pendiente_bloqueado` — montado una sola vez en el grupo protegido (main.py).
+3. `requiere_rol(*roles)` — por ruta; consulta los roles vigentes en la base (D3) → 403.
 """
 
 from typing import Annotated
 
 from fastapi import Depends, Request
-from sqlalchemy import select
-from sqlmodel import col
 
 from app.core.database import SesionDep
-from app.core.errores import NoAutenticado
+from app.core.errores import NoAutorizado, NoAutenticado
 from app.core.security import TokenInvalido, verificar_token
-from app.modules.usuarios.models import Usuario
 from app.modules.usuarios.schemas import IdentidadLectura
-from app.modules.usuarios.service import obtener_identidad
+from app.modules.usuarios.service import obtener_identidad, roles_vigentes
 from app.modules.usuarios.unit_of_work import UnitOfWorkUsuario
-
-
-async def actor_temporal(sesion: SesionDep) -> Usuario:
-    """Usuario `admin@example.com` (una fila del seed) como actor de auditoría."""
-    resultado = await sesion.execute(
-        select(Usuario).where(col(Usuario.email) == "admin@example.com")
-    )
-    usuario = resultado.scalars().first()
-    if usuario is None:
-        raise RuntimeError("Falta el usuario admin@example.com: corré `python seed.py`.")
-    return usuario
-
-
-ActorTemporalDep = Annotated[Usuario, Depends(actor_temporal)]
 
 
 async def get_usuario_actual(request: Request, sesion: SesionDep) -> IdentidadLectura:
@@ -46,3 +28,30 @@ async def get_usuario_actual(request: Request, sesion: SesionDep) -> IdentidadLe
 
 
 UsuarioActualDep = Annotated[IdentidadLectura, Depends(get_usuario_actual)]
+
+
+async def cambio_pendiente_bloqueado(identidad: UsuarioActualDep) -> IdentidadLectura:
+    """Bloquea el grupo protegido si la contraseña obligatoria sigue pendiente (C-09)."""
+    if identidad.usuario.debe_cambiar_password:
+        raise NoAutorizado("Tenés que cambiar tu contraseña antes de continuar.")
+    return identidad
+
+
+def requiere_rol(*roles: str):
+    """Dependencia de fábrica (D2): exige alguno de los roles vigentes en la base (D3).
+
+    La identidad se resuelve primero (401 antes que cualquier 403) y los roles
+    se consultan por petición, sin caché y sin mirar los roles del token.
+    """
+    if not roles:
+        raise ValueError("requiere_rol necesita al menos un rol.")
+
+    async def _dependencia(
+        identidad: UsuarioActualDep, sesion: SesionDep,
+    ) -> IdentidadLectura:
+        vigentes = await roles_vigentes(UnitOfWorkUsuario(sesion), identidad.usuario.id)
+        if not set(roles) & set(vigentes):
+            raise NoAutorizado()
+        return identidad
+
+    return _dependencia

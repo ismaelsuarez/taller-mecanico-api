@@ -1,4 +1,4 @@
-"""Reglas de negocio de clientes y vehículos (Cliente y Vehiculo) — EJ-3.
+"""Reglas de negocio de clientes y vehículos (Cliente y Vehiculo) — EJ-3/EJ-5.
 
 Cada función recibe el UoW y lo abre con `async with` (RT-TX-02); nunca lo
 construye (B-2). Los errores son excepciones de dominio que la aplicación
@@ -11,6 +11,7 @@ La unicidad de `documento` y de `patente` entre vigentes la garantiza la base
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errores import EnConflicto, NoEncontrado
+from app.core.paginacion import Pagina, pagina
 from app.modules.clientes.models import Cliente, Vehiculo
 from app.modules.clientes.schemas import (
     ClienteCrear,
@@ -77,3 +78,15 @@ async def borrar_vehiculo(uow: UnitOfWorkCliente, vehiculo_id: int) -> None:
                 "El vehículo tiene órdenes de trabajo abiertas y no se puede dar de baja."
             )
         await uow.vehiculos.soft_delete(vehiculo)
+
+
+async def mis_vehiculos(
+    uow: UnitOfWorkCliente, usuario_id: int, page: int, size: int,
+) -> Pagina[VehiculoLectura]:
+    """Lo propio (RN-17, DD-28): sólo los vehículos vigentes; sin ficha → página vacía (SU-11)."""
+    async with uow:
+        items, total = await uow.clientes.get_vehiculos_vigentes_de_usuario(
+            usuario_id, page, size,
+        )
+    lectura = [VehiculoLectura.model_validate(v, from_attributes=True) for v in items]
+    return pagina(lectura, total, page, size)

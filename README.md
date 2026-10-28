@@ -98,7 +98,7 @@ La respuesta no repite los datos enviados ni incluye ubicaciones o códigos inte
 
 ## Primitivas de autenticación (EJ-4)
 
-`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo`, `POST /auth/logout` y `POST /auth/cambiar-password`**. El CRUD y `actor_temporal` continúan abiertos hasta EJ-5.
+`app/core/security.py` ofrece los helpers de bcrypt y JWT. **Están disponibles registro, login, `GET /auth/yo`, `POST /auth/logout` y `POST /auth/cambiar-password`**. Desde EJ-5 el CRUD y las rutas de datos exigen sesión y rol (ver más abajo); `actor_temporal` fue eliminado.
 
 | Interfaz pública | Uso |
 |---|---|
@@ -153,7 +153,7 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 - `GET /auth/yo` exige exclusivamente cookie: devuelve `usuario: {id,email,nombre,debe_cambiar_password}`, `roles_vigentes` y `roles_token`, sin secretos ni cookie nueva. Los roles actuales se precargan y excluyen revocados/vencidos; tener cero roles o cambio pendiente no impide esta consulta.
 - Cookie ausente (también Bearer sin cookie), JWT inválido/vencido, usuario inexistente/inactivo o emisión anterior al último cambio → **401** `{"detail":"La sesión no es válida. Volvé a iniciar sesión."}`. Se conserva la fracción original; igualdad con el cambio es válida.
 - `POST /auth/logout` es público, incluso con cookie inválida/ausente: **200** `{"mensaje":"Sesión cerrada"}` y eliminación con Path=/, sin Domain, HttpOnly, SameSite=Lax, Secure configurable, Max-Age=0 y Expires pasado. No modifica la base ni revoca copias del JWT: pueden seguir válidas hasta expirar/cambiar contraseña.
-- OpenAPI publica yo 200/401 y logout 200, ambos con el 422 heredado del montaje común. **CRUD/`actor_temporal` permanecen abiertos hasta EJ-5**; no hay RBAC ni bloqueo global por contraseña pendiente.
+- OpenAPI publica yo 200/401 y logout 200, ambos con el 422 heredado del montaje común. El RBAC y el bloqueo global por contraseña pendiente se describen en la sección de autorización (EJ-5).
 
 `test_identidad.py`/`test_logout.py` verifican HTTP ASGI y PostgreSQL/Alembic reales: claims, estado actual, frontera ±1 microsegundo, roles cambiados, eliminación y ausencia de escrituras. Focalizadas T5 + expectativa OpenAPI previa: **33 aprobadas, 0 omitidas**. La suite completa y la ejecución host solicitada por el verificador independiente dieron **563 aprobadas, 0 omitidas y 76 advertencias conocidas** de la clave JWT de fixture. Los **22 bloques TCP** pasaron tras Alembic/seed en bases aisladas. El diferencial contra `9cb3f16` conservó 15 solicitudes por versión a los tres consumidores de `actor_temporal`, con códigos, cuerpos, encabezados y efectos auditados equivalentes. Sólo normaliza fechas previamente validadas; compara stderr bajo el mismo formato sin frames de traceback. El dictamen independiente cubre T5, no cambio de contraseña, EJ-5 ni cierre global de EJ-4.
 
@@ -171,11 +171,29 @@ La lectura termina antes de verificar/calcular bcrypt (hilo y semáforo existent
 
 **Evidencia funcional:** RED HTTP 404 del implementador; verificación final focalizada de cambio + registro: 45 aprobadas sin omisiones, incluidas las aserciones de rollback. La ejecución host preparada por el verificador independiente aprobó **595 pruebas, 0 omitidas y 132 advertencias conocidas de clave JWT de fixture**, más los **28 bloques TCP** sobre PostgreSQL migrada/seed aislados. El diferencial contra `c36b50e` aprobó 48 solicitudes por versión a registro/login, con Secure activado/desactivado y comparación de exit/stdout/stderr; sólo normaliza sales bcrypt verificadas, fechas conscientes de zona y JWT/tiempos previamente validados. El dictamen independiente aprueba 6.1–6.3, sin atribuirle el RED histórico ni una revisión nativa.
 
-**C-09 parcial ejecutado por TCP:** `test/auth.http` conserva los 22 bloques anteriores y agrega seis (28 total). Definí `PASSWORD_PENDIENTE` con la contraseña de `nuevo@example.com` del seed y `PASSWORD_NUEVA` distinta, efímera y de hasta 72 bytes; nunca las guardes en el archivo. Usa una cuenta distinta de la bloqueada por C-05, cookies nombradas y sin cookie jar. Al terminar se esperan 12 intentos (9 fallidos/3 exitosos) y cuatro eventos incluido seed. El bloqueo global **403**, RBAC y protección del CRUD siguen siendo **EJ-5**, no parte de esta prueba.
+**C-09 parcial ejecutado por TCP:** `test/auth.http` conserva los 22 bloques anteriores y agrega seis (28 total). Definí `PASSWORD_PENDIENTE` con la contraseña de `nuevo@example.com` del seed y `PASSWORD_NUEVA` distinta, efímera y de hasta 72 bytes; nunca las guardes en el archivo. Usa una cuenta distinta de la bloqueada por C-05, cookies nombradas y sin cookie jar. Al terminar se esperan 12 intentos (9 fallidos/3 exitosos) y cuatro eventos incluido seed. El bloqueo global **403** y el RBAC completan C-09 en EJ-5 (ver sección siguiente); el archivo `test/autorizacion.http` los demuestra.
+
+## Autorización por roles (EJ-5)
+
+`app/core/dependencies.py` implementa los controles en este orden (DD-50): **identidad** (`get_usuario_actual`, 401 ante cualquier fallo de cookie/firma/vigencia) → **cambio obligatorio** (`cambio_pendiente_bloqueado`, dependencia del grupo protegido montada una sola vez en `main.py`, 403 si `debe_cambiar_password`) → **rol** (`requiere_rol(*roles)`, 403 si falta el rol vigente; consulta `asignacion_rol` **en cada petición**, sin caché y sin mirar el JWT — RN-04). Sin sesión siempre hay 401 antes que cualquier 403.
+
+| Ruta | Quién |
+|---|---|
+| `POST /clientes`, `GET /clientes/{id}`, `POST /clientes/{id}/vehiculos`, `DELETE /vehiculos/{id}` | ADMIN, RECEPCION |
+| `GET /repuestos`, `GET /repuestos/{id}` | ADMIN, RECEPCION, MECANICO |
+| `POST/PATCH/DELETE /repuestos`, `/reponer`, `/movimientos`, `/precios` | ADMIN |
+| `POST /usuarios`, `GET/POST /usuarios/{id}/roles`, `DELETE /usuarios/{id}/roles/{rol}`, `GET /eventos` | ADMIN |
+| `GET /mis-vehiculos`, `GET /mis-ordenes` | Cualquier sesión (sólo lo propio; vacío sin ficha — SU-11) |
+
+El alta de personal (`POST /usuarios`) crea usuario + asignación de rol (`otorgada_por` = admin) + evento en un solo UoW, con `debe_cambiar_password = true` (DD-18). Revocar un rol escribe `revocada_en` sin borrar la fila y surte efecto en la siguiente petición de la sesión abierta (C-07); la autoprotección RN-05 impide revocar el propio ADMIN o quedar sin administradores. Los eventos de seguridad se consultan paginados en `GET /eventos` (ADMIN).
+
+El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) queda listo para el 403 de orden ajena de EJ-6 (T-8). El reemplazo del actor temporal garantiza que `movimiento_stock` e `historial_precio_repuesto` firman con el usuario autenticado; sin sesión no se escribe nada.
+
+**Pruebas:** `test/pytest/autorizacion/` (104 pruebas: schemas, identidad, protección de rutas, roles, alta personal, eventos/lo propio) y `test/autorizacion.http` (C-06 parcial, C-07, C-08, C-09 completo). C-18 (recepción 403 al cambiar precio sin línea de historial) vive en `test/repuestos.http`. La suite completa dio **697 aprobadas + 2 fallos ambientales conocidos de Windows/loopback** (sin relation con el producto; ver `odd/tasks/05-autorizacion.md` L2).
 
 ## Endpoints
 
-> **Rutas abiertas hasta EJ-5 (T-11):** registro/login no protegen el CRUD; desde EJ-5 estos grupos quedan protegidos por roles.
+> **Desde EJ-5 (T-11)** `main.py` monta dos grupos: abierto (`/health/*`, `/auth/*`) y protegido (el resto), con el control de cambio de contraseña pendiente montado una sola vez sobre el grupo protegido. Las rutas de datos exigen sesión y el rol de la matriz RBAC (`knowledge-base/03_actores_y_roles.md`).
 
 ### Salud (públicas siempre)
 

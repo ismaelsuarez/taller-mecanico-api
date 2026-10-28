@@ -234,7 +234,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
   - `knowledge-base/10_preguntas_abiertas.md` (cuerpo de registro, usuario inactivo)
 
 ### [EJ-5] `05-autorizacion`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado y archivado (2026-10-28; 697 tests + 2 fallos ambientales conocidos de Windows/loopback; verificación independiente APROBADA 11/11; C-06 parcial, C-07, C-08, C-09, C-18)
 - **Ejercicio / puntos**: Ejercicio 5 — 14 pts (14 %)
 - **Scope**:
   - `app/core/dependencies.py`: `get_usuario_actual` (401 sin cookie, token inválido/vencido, usuario inexistente/inactivo o `iat` anterior a `password_cambiada_en`) y `requiere_rol` (403; **consulta `asignacion_rol` en cada petición**; los roles del token son informativos).

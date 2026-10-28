@@ -12,6 +12,8 @@
 # PASSWORD_NUEVA debe ser distinta, efímera y de hasta 72 bytes UTF-8.
 @passwordPendiente = {{$processEnv PASSWORD_PENDIENTE}}
 @passwordNueva = {{$processEnv PASSWORD_NUEVA}}
+# C-01: desde EJ-5 el CRUD exige rol; el 422 se alcanza con sesión ADMIN.
+@passwordAdmin = {{$processEnv PASSWORD_ADMIN}}
 
 ### C-02 — Registro atómico, correo/documento repetidos
 # @name registroCliente
@@ -176,13 +178,24 @@ GET {{baseUrl}}/auth/yo
 GET {{baseUrl}}/auth/yo
 Authorization: Bearer {{tokenSoloBearer}}
 
+### C-01 — Preparación: sesión con el rol de la ruta (ADMIN)
+# Desde EJ-5 el CRUD de clientes pide ADMIN/RECEPCION; sin ese rol el 403 del
+# contrato se resuelve antes que la validación del parámetro y el 422 nunca llega.
+# @name loginAdminC01
+# @no-cookie-jar
+# Esperado: 200 {"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@example.com","password":"{{passwordAdmin}}"}
+
 ### C-01 — Parámetro de ruta no entero con sesión iniciada
 # @name rutaInvalida
 # @no-cookie-jar
 # Esperado: 422 {"detail":[{"msg":"Ingresá un número entero para el cliente seleccionado."}]}
-# Sin ejecutar el handler ni escribir. El CRUD aún está abierto hasta EJ-5.
+# Sin ejecutar el handler ni escribir.
 GET {{baseUrl}}/clientes/no-entero
-Cookie: {{loginCliente.response.headers.Set-Cookie}}
+Cookie: {{loginAdminC01.response.headers.Set-Cookie}}
 
 ### Logout — Cerrar sesión con cookie
 # @name logoutCliente

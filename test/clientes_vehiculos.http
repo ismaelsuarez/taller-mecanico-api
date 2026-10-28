@@ -1,16 +1,32 @@
 # Clientes y vehículos (EJ-3 — change 03-contratos-crud). Extensión REST Client de VS Code.
 # Antes de correr ESTE archivo:  python seed.py
 # Los ids esperados salen del seed (TRUNCATE ... RESTART IDENTITY + setval, DD-38).
-# Rutas ABIERTAS hasta EJ-5 (T-11): todavía no hay login ni cookies (D-3).
+# Desde EJ-5 las rutas exigen rol ADMIN/RECEPCION: se gana sólo la capa de sesión,
+# los contratos de respuesta no cambian.
+# Definir PASSWORD_ADMIN con la contraseña del seed de admin@example.com
+# (la contraseña de mentira vive sólo en seed.py — S-6).
 
 @baseUrl = http://localhost:8000
+@passwordAdmin = {{$processEnv PASSWORD_ADMIN}}
+
+### Login del administrador (base de todas las sesiones de este archivo)
+# @name loginAdmin
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Sesión iniciada", "debe_cambiar_password": false, "expira_en_segundos": 1800}
+# Cookie access_token con los atributos de C-03; sin token ni hash en el cuerpo.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@example.com","password":"{{passwordAdmin}}"}
 
 ### C-01 (parte de 422): el parámetro de ruta no es un entero
-# La parte «con sesión iniciada» se completa en EJ-4; este 422 lo produce FastAPI
-# antes de ejecutar el handler. El traductor sólo devuelve mensajes humanos, sin repetir la entrada.
+# Con sesión que tiene el rol de la ruta: la validación responde 422 antes del
+# handler. El traductor sólo devuelve mensajes humanos, sin repetir la entrada.
 # Esperado: 422 Unprocessable Entity
 # {"detail": [{"msg": "Ingresá un número entero para el cliente seleccionado."}]}
 GET {{baseUrl}}/clientes/abc
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### Detalle de un cliente con sus vehículos vigentes
 # Esperado: 200 OK — Laura con sus 2 vehículos del seed; un dado de baja no aparecería
@@ -20,17 +36,20 @@ GET {{baseUrl}}/clientes/abc
 #    {"id": 2, "cliente_id": 1, "patente": "AC456EF", "marca": "Toyota", "modelo": "Corolla", "anio": 2022}
 #  ]}
 GET {{baseUrl}}/clientes/1
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### Cliente inexistente
 # Esperado: 404 Not Found
 # {"detail": "Cliente no encontrado."}
 GET {{baseUrl}}/clientes/999999
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### Alta de cliente
 # Esperado: 201 Created — la respuesta nunca incluye password_hash
 # {"id": 3, "nombre": "Cliente Nuevo", "documento": "DNI-90001", "telefono": "11-9000-0001"}
 POST {{baseUrl}}/clientes
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "nombre": "Cliente Nuevo",
@@ -43,6 +62,7 @@ Content-Type: application/json
 # {"detail": "Ya existe un cliente con ese documento."}
 POST {{baseUrl}}/clientes
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "nombre": "Cliente Nuevo",
@@ -58,6 +78,7 @@ Content-Type: application/json
 # ]}
 POST {{baseUrl}}/clientes
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "nombre": "Sin documento"
@@ -68,6 +89,7 @@ Content-Type: application/json
 # {"id": 4, "cliente_id": 3, "patente": "AA999ZZ", "marca": "Volkswagen", "modelo": "Gol", "anio": 2019}
 POST {{baseUrl}}/clientes/3/vehiculos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "patente": "AA999ZZ",
@@ -81,6 +103,7 @@ Content-Type: application/json
 # {"detail": "Ya existe un vehículo con esa patente."}
 POST {{baseUrl}}/clientes/2/vehiculos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "patente": "AA999ZZ",
@@ -94,11 +117,13 @@ Content-Type: application/json
 # Esperado: 409 Conflict
 # {"detail": "El vehículo tiene órdenes de trabajo abiertas y no se puede dar de baja."}
 DELETE {{baseUrl}}/vehiculos/3
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-19: dar de baja un vehículo sin órdenes
 # El vehículo 2 (AC456EF) no tiene órdenes: baja lógica, el dato se conserva.
 # Esperado: 204 No Content — sin cuerpo
 DELETE {{baseUrl}}/vehiculos/2
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-19: reutilizar la patente para otro cliente
 # El índice único parcial sólo cuenta los vigentes: después de la baja, la patente queda libre.
@@ -106,6 +131,7 @@ DELETE {{baseUrl}}/vehiculos/2
 # {"id": 6, "cliente_id": 2, "patente": "AC456EF", "marca": "Toyota", "modelo": "Corolla", "anio": 2022}
 POST {{baseUrl}}/clientes/2/vehiculos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "patente": "AC456EF",
@@ -119,6 +145,7 @@ Content-Type: application/json
 # {"detail": "Ya existe un vehículo con esa patente."}
 POST {{baseUrl}}/clientes/1/vehiculos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "patente": "AC456EF",

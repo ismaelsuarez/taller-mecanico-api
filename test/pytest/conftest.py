@@ -137,12 +137,19 @@ async def base_migrada(configurar_entorno):
 
 @pytest.fixture
 async def api(base_migrada):
-    """Aplicación con esquema Alembic real y catálogo + admin sembrados.
+    """Aplicación con esquema Alembic real; el cliente nace logueado como admin.
 
     Devuelve `(cliente_http, motor)`; la fixture base_migrada limpia al salir,
-    incluso si falla la preparación de datos o el lifespan.
+    incluso si falla la preparación de datos o el lifespan. El admin tiene hash
+    real, rol ADMIN vigente y sesión iniciada por login (EJ-5): las rutas de
+    clientes y repuestos exigen rol desde el RBAC.
     """
+    from datetime import UTC, datetime
+
     from sqlalchemy import text
+
+    from app.core.security import hashear_password
+    from app.modules.usuarios.models import AsignacionRol, Usuario
 
     motor = base_migrada
     async with motor.begin() as conn:
@@ -154,13 +161,27 @@ async def api(base_migrada):
                 ),
                 {"c": codigo, "d": descripcion, "p": posicion, "f": es_final},
             )
-        # El admin lo usa `actor_temporal` (T-4); en producción lo crea seed.py.
-        await conn.execute(
-            text(
-                "INSERT INTO usuario (id, email, nombre, password_hash, activo, debe_cambiar_password) "
-                "VALUES (1, 'admin@example.com', 'Administrador Uno', 'hash-de-test', true, false)"
-            )
-        )
 
-    async with aplicacion_iniciada() as app, cliente_http(app) as cliente:
-        yield cliente, motor
+    password = "clave-de-api-de-test"
+
+    async with aplicacion_iniciada() as app:
+        hash_ = await hashear_password(password, app.state.settings.bcrypt_rounds)
+        async with app.state.fabrica_sesiones() as sesion:
+            admin = Usuario(
+                email="admin@example.com", nombre="Administrador Uno",
+                password_hash=hash_, activo=True, debe_cambiar_password=False,
+            )
+            sesion.add(admin)
+            await sesion.flush()
+            assert admin.id is not None
+            sesion.add(AsignacionRol(
+                usuario_id=admin.id, rol="ADMIN", desde=datetime.now(UTC),
+            ))
+            await sesion.commit()
+
+        async with cliente_http(app) as cliente:
+            login = await cliente.post(
+                "/auth/login", json={"email": "admin@example.com", "password": password},
+            )
+            assert login.status_code == 200, login.text
+            yield cliente, motor

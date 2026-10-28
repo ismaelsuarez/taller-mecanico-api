@@ -1,15 +1,40 @@
 # Catálogo de repuestos (EJ-3 — change 03-contratos-crud). Extensión REST Client de VS Code.
 # Antes de correr ESTE archivo:  python seed.py
-# Rutas ABIERTAS hasta EJ-5 (T-11): todavía no hay login ni cookies (D-3).
+# Desde EJ-5 las rutas exigen rol: lectura ADMIN/RECEPCION/MECANICO, escritura sólo
+# ADMIN (matriz RBAC). Se gana sólo la capa de sesión; los contratos no cambian.
+# Definir PASSWORD_ADMIN con la contraseña del seed de admin@example.com
+# y PASSWORD_RECEPCION con la de recepcion@example.com (viven sólo en seed.py — S-6).
 # Las marcas `cuando` del historial son la fecha y hora del seed: varían en cada corrida.
 
 @baseUrl = http://localhost:8000
+@passwordAdmin = {{$processEnv PASSWORD_ADMIN}}
+@passwordRecepcion = {{$processEnv PASSWORD_RECEPCION}}
+
+### Login del administrador (escrituras y verificación del historial)
+# @name loginAdmin
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Sesión iniciada", "debe_cambiar_password": false, "expira_en_segundos": 1800}
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@example.com","password":"{{passwordAdmin}}"}
+
+### Login de la recepción (C-18: lee pero no escribe precio/descripción)
+# @name loginRecepcion
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"recepcion@example.com","password":"{{passwordRecepcion}}"}
 
 ### C-16: búsqueda con sintaxis de inyección
 # Parámetro ligado (S-3): la consulta no encuentra nada y nunca da error.
 # Esperado: 200 OK
 # {"items": [], "total": 0, "page": 1, "size": 20, "pages": 1}
 GET {{baseUrl}}/repuestos?q=%27%20OR%20%271%27%3D%271
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-16: búsqueda con filtro y una sola página
 # `q` = ' OR '1'='1 arriba; acá `q=freno` encuentra «Pastillas de freno delanteras».
@@ -17,16 +42,19 @@ GET {{baseUrl}}/repuestos?q=%27%20OR%20%271%27%3D%271
 # {"items": [{"id": 2, "codigo": "FRE-010", "descripcion": "Pastillas de freno delanteras", "precio": "32000.00", "stock": 4}],
 #  "total": 1, "page": 1, "size": 1, "pages": 1}
 GET {{baseUrl}}/repuestos?q=freno&size=1
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-16: página más allá de la última con el mismo filtro
 # Esperado: 422 Unprocessable Entity
 # {"detail": "La página 2 no existe: hay 1"}
 GET {{baseUrl}}/repuestos?q=freno&size=1&page=2
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-16: size fuera del máximo del contrato
 # Esperado: 422 Unprocessable Entity
 # {"detail": [{"msg": "Revisá la cantidad por página: está fuera del rango permitido."}]}
 GET {{baseUrl}}/repuestos?size=500
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-18: historial de precios antes de tocarlo (una línea del seed: 8000 → 8500)
 # Esperado: 200 OK — la marca `cuando` varía en cada corrida
@@ -34,13 +62,46 @@ GET {{baseUrl}}/repuestos?size=500
 #   {"id": 1, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8000.00", "precio_nuevo": "8500.00", "cuando": "<fecha del seed>"}
 # ]
 GET {{baseUrl}}/repuestos/1/precios
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
-### C-18: cambiar el precio del repuesto
+### C-18: la recepción recibe 403 al cambiar el precio (EJ-5)
+# La recepción tiene rol de lectura; el precio y la descripción los cambia sólo ADMIN.
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+PATCH {{baseUrl}}/repuestos/1
+Content-Type: application/json
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+{
+  "precio": "9999.00"
+}
+
+### C-18: la recepción recibe 403 al cambiar la descripción
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+PATCH {{baseUrl}}/repuestos/1
+Content-Type: application/json
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+{
+  "descripcion": "No debe cambiarse"
+}
+
+### C-18: el 403 no agregó ninguna línea de historial
+# Esperado: 200 OK — sigue con exactamente la línea del seed (RN-20)
+# [
+#   {"id": 1, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8000.00", "precio_nuevo": "8500.00", "cuando": "<fecha del seed>"}
+# ]
+GET {{baseUrl}}/repuestos/1/precios
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-18: cambiar el precio del repuesto (con el rol de escritura)
 # PATCH parcial (RT-PG-03): sólo se envía `precio` y la descripción queda intacta.
 # Esperado: 200 OK
 # {"id": 1, "codigo": "FIL-001", "descripcion": "Filtro de aceite", "precio": "9500.00", "stock": 10}
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "precio": "9500.00"
@@ -53,12 +114,14 @@ Content-Type: application/json
 #   {"id": 2, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8500.00", "precio_nuevo": "9500.00", "cuando": "<fecha actual>"}
 # ]
 GET {{baseUrl}}/repuestos/1/precios
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-18: segundo PATCH sólo con la descripción
 # Esperado: 200 OK — cambia la descripción y el precio sigue en 9500.00
 # {"id": 1, "codigo": "FIL-001", "descripcion": "Filtro de aceite sintético", "precio": "9500.00", "stock": 10}
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "descripcion": "Filtro de aceite sintético"
@@ -70,8 +133,8 @@ Content-Type: application/json
 #   {"id": 1, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8000.00", "precio_nuevo": "8500.00", "cuando": "<fecha del seed>"},
 #   {"id": 2, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8500.00", "precio_nuevo": "9500.00", "cuando": "<fecha actual>"}
 # ]
-# (El 403 de la recepción del caso C-18 se demuestra en EJ-5, cuando hay login.)
 GET {{baseUrl}}/repuestos/1/precios
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-16: el stock no se edita por PATCH
 # `extra="forbid"` rechaza el campo: el stock sólo cambia por el punto único de escritura (RN-14).
@@ -79,6 +142,7 @@ GET {{baseUrl}}/repuestos/1/precios
 # {"detail": [{"msg": "Enviá sólo los datos permitidos para esta operación."}]}
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "stock": 5
@@ -88,6 +152,7 @@ Content-Type: application/json
 # Esperado: 422 Unprocessable Entity, sin cambiar descripción, precio ni historial.
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "descripcion": "No debe guardarse",
@@ -98,6 +163,7 @@ Content-Type: application/json
 # Esperado: 422 Unprocessable Entity, sin cambiar el repuesto ni su historial.
 PATCH {{baseUrl}}/repuestos/1
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "precio": "100000000"
@@ -107,6 +173,7 @@ Content-Type: application/json
 # Esperado: 422 Unprocessable Entity, sin crear repuesto ni movimiento.
 POST {{baseUrl}}/repuestos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "codigo": "LIM-INVALIDO",
@@ -119,6 +186,7 @@ Content-Type: application/json
 # Esperado: 422 Unprocessable Entity, stock 10 y movimientos sin cambios.
 POST {{baseUrl}}/repuestos/1/reponer
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "cantidad": 2147483648
@@ -130,6 +198,7 @@ Content-Type: application/json
 # @name repuestoLimite
 POST {{baseUrl}}/repuestos
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "codigo": "LIM-MAXIMO",
@@ -142,6 +211,7 @@ Content-Type: application/json
 # Esperado: 200 OK, stock 2147483647 y un nuevo movimiento de cantidad 1.
 POST {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/reponer
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "cantidad": 1
@@ -152,6 +222,7 @@ Content-Type: application/json
 # {"detail": "La reposición supera el máximo de existencias permitido."}
 POST {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/reponer
 Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {
   "cantidad": 1
@@ -160,7 +231,9 @@ Content-Type: application/json
 ### RN-14 / S1: el rechazo no cambió las existencias
 # Esperado: 200 OK, precio "99999999.99", stock 2147483647.
 GET {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### RN-14 / S1: el rechazo no agregó un movimiento
 # Esperado: 200 OK, exactamente dos movimientos: 2147483646 y 1, en ese orden.
 GET {{baseUrl}}/repuestos/{{repuestoLimite.response.body.$.id}}/movimientos
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}

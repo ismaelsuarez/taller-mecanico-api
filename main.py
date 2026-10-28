@@ -4,16 +4,19 @@ import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 
 from app.core.config import obtener_settings
 from app.core.database import crear_fabrica_sesiones, crear_motor
+from app.core.dependencies import cambio_pendiente_bloqueado
 from app.core.errores import RespuestaValidacion, registrar_traductores
 from app.core.security import configurar_semaforo_bcrypt, hashear_password
 from app.modules.clientes.router import router as router_clientes
 from app.modules.health.router import router as router_salud
+from app.modules.ordenes.router import router as router_ordenes
 from app.modules.repuestos.router import router as router_repuestos
 from app.modules.usuarios.router import router as router_auth
+from app.modules.usuarios.router import router_administracion
 
 
 @asynccontextmanager
@@ -39,16 +42,27 @@ app = FastAPI(title="Taller Mecánico API", lifespan=lifespan)
 # Excepciones de dominio → 404/409 con mensaje propio (D8, RN-18).
 registrar_traductores(app)
 
-# Grupo abierto: salud, clientes, vehículos y repuestos y, desde EJ-4, /auth.
-# El grupo protegido llega en EJ-5 (T-11).
+# Grupo abierto: salud y /auth (login, identidad y cambio obligatorio: C-09).
 rutas_abiertas = APIRouter()
 rutas_abiertas.include_router(router_salud)
 rutas_abiertas.include_router(router_auth, responses={422: {"model": RespuestaValidacion}})
-rutas_abiertas.include_router(
+
+# Grupo protegido: clientes/vehículos, repuestos, administración de personal y
+# lo propio, con la matriz RBAC por ruta. El cambio de contraseña pendiente
+# bloquea todo el grupo (C-09, D2, DD-10).
+rutas_protegidas = APIRouter(dependencies=[Depends(cambio_pendiente_bloqueado)])
+rutas_protegidas.include_router(
     router_clientes, responses={422: {"model": RespuestaValidacion}}
 )
-rutas_abiertas.include_router(
+rutas_protegidas.include_router(
     router_repuestos, responses={422: {"model": RespuestaValidacion}}
+)
+rutas_protegidas.include_router(
+    router_administracion, responses={422: {"model": RespuestaValidacion}}
+)
+rutas_protegidas.include_router(
+    router_ordenes, responses={422: {"model": RespuestaValidacion}}
 )
 
 app.include_router(rutas_abiertas)
+app.include_router(rutas_protegidas)

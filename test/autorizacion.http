@@ -1,0 +1,287 @@
+# Autorización (EJ-5 — change 05-autorizacion). Extensión REST Client de VS Code.
+# Antes de correr ESTE archivo:  python seed.py
+# Demuestra C-06 (parte), C-07, C-08 y C-09 completo. C-01 vive en auth.http y
+# clientes_vehiculos.http; C-18 (403 de la recepción) vive en repuestos.http.
+# El 403 de orden ajena (la otra mitad de C-06) se cablea en EJ-6 con GET /ordenes/{id}.
+# Definir PASSWORD_ADMIN, PASSWORD_RECEPCION, PASSWORD_CLIENTE y PASSWORD_MECANICO
+# con las contraseñas del seed de admin@, recepcion@, cliente@ y mecanico@ (viven
+# sólo en seed.py — S-6); PASSWORD_PENDIENTE con la de nuevo@example.com y
+# PASSWORD_NUEVA distinta, efímera y de hasta 72 bytes UTF-8 para C-09.
+# Ids del seed: admin=1, admin2=2, recepcion=3, mecanico=4, cliente=6 (Laura), nuevo=7.
+# Las marcas `cuando`/`desde` son fechas que varían en cada corrida.
+
+@baseUrl = http://localhost:8000
+@passwordAdmin = {{$processEnv PASSWORD_ADMIN}}
+@passwordRecepcion = {{$processEnv PASSWORD_RECEPCION}}
+@passwordCliente = {{$processEnv PASSWORD_CLIENTE}}
+@passwordMecanico = {{$processEnv PASSWORD_MECANICO}}
+@passwordPendiente = {{$processEnv PASSWORD_PENDIENTE}}
+@passwordNueva = {{$processEnv PASSWORD_NUEVA}}
+
+### Login del administrador (revocaciones, roles y eventos)
+# @name loginAdmin
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Sesión iniciada", "debe_cambiar_password": false, "expira_en_segundos": 1800}
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@example.com","password":"{{passwordAdmin}}"}
+
+### Login de la recepción (C-06: 403 sin rol; C-07: sesión abierta a revocar)
+# @name loginRecepcion
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"recepcion@example.com","password":"{{passwordRecepcion}}"}
+
+### Login del cliente Laura (C-06: lo propio en /mis-vehiculos y /mis-ordenes)
+# @name loginCliente
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"cliente@example.com","password":"{{passwordCliente}}"}
+
+### Login del mecánico sin ficha de cliente (C-06: página vacía en /mis-*)
+# @name loginMecanico
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"mecanico@example.com","password":"{{passwordMecanico}}"}
+
+### C-06: sin sesión siempre hay 401, nunca un 403 por rol
+# Misma ruta que el bloque siguiente: sólo cambia la cookie.
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+GET {{baseUrl}}/repuestos
+
+### C-06: con sesión pero sin rol de la ruta, 403
+# Laura sólo tiene CLIENTE: lectura de repuestos es ADMIN/RECEPCION/MECANICO.
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+GET {{baseUrl}}/repuestos
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-06 / SU-11: sin sesión en lo propio también es 401
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+GET {{baseUrl}}/mis-vehiculos
+
+### C-06: Laura ve sus dos vehículos vigentes (RN-17)
+# El seed le da AA111BB (id 1) y AC456EF (id 2); ninguno está dado de baja.
+# Esperado: 200 OK
+# {"items": [
+#   {"id": 1, "cliente_id": 1, "patente": "AA111BB", "marca": "Fiat", "modelo": "Cronos", "anio": 2020},
+#   {"id": 2, "cliente_id": 1, "patente": "AC456EF", "marca": "Toyota", "modelo": "Corolla", "anio": 2022}
+# ], "total": 2, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/mis-vehiculos
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-06: Laura ve su orden (la 1 es del vehículo AA111BB)
+# Sólo lo propio: la orden 2 es del vehículo de Jorge y no aparece acá.
+# El 403 sobre una orden ajena vía GET /ordenes/{id} se demuestra en EJ-6 (T-8).
+# Esperado: 200 OK
+# {"items": [
+#   {"id": 1, "vehiculo_id": 1, "estado": "PENDIENTE", "falla": "Cambio de aceite y filtro",
+#    "creada_en": "<fecha>", "mecanico_id": null, "total": "56500.00"}
+# ], "total": 1, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/mis-ordenes
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-06: un usuario sin ficha de cliente recibe una página vacía
+# El mecánico no tiene vehículos propios (SU-11); no es un error.
+# Esperado: 200 OK
+# {"items": [], "total": 0, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/mis-vehiculos
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### C-06: y tampoco tiene órdenes propias
+# Esperado: 200 OK
+# {"items": [], "total": 0, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/mis-ordenes
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### C-07: roles vigentes de la recepción antes de revocar
+# Esperado: 200 OK
+# {"items": [{"rol": "RECEPCION", "desde": "<fecha>", "vence_en": null, "otorgada_por": null}]}
+GET {{baseUrl}}/usuarios/3/roles
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-07: con el rol vigente, la recepción lee repuestos
+# Esperado: 200 OK — los cuatro repuestos del seed
+# {"items": [
+#   {"id": 1, "codigo": "FIL-001", "descripcion": "Filtro de aceite", "precio": "8500.00", "stock": 10},
+#   {"id": 2, "codigo": "FRE-010", "descripcion": "Pastillas de freno delanteras", "precio": "32000.00", "stock": 4},
+#   {"id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido", "precio": "6500.00", "stock": 2},
+#   {"id": 4, "codigo": "ACE-530", "descripcion": "Aceite 5W30 por litro", "precio": "12000.00", "stock": 20}
+# ], "total": 4, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/repuestos
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-07: /auth/yo antes de la revocación
+# Esperado: 200 OK
+# {"usuario": {"id": 3, "email": "recepcion@example.com", "nombre": "Recepción",
+#  "debe_cambiar_password": false},
+#  "roles_vigentes": ["RECEPCION"], "roles_token": ["RECEPCION"]}
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-07: el admin revoca el rol con la sesión de la recepción abierta
+# La fila no se borra: se escribe revocada_en (DD-26 / RN-04).
+# Esperado: 200 OK
+# {"mensaje": "Rol RECEPCION revocado"}
+DELETE {{baseUrl}}/usuarios/3/roles/RECEPCION
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-07: la MISMA cookie recibe 403 en la petición siguiente
+# El JWT sigue siendo válido; el fallo viene de la consulta de roles vigentes
+# a la base en cada petición (RN-04, DD-50).
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+GET {{baseUrl}}/repuestos
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-07: /auth/yo muestra la diferencia entre vigentes y token
+# roles_vigentes sale de la base (vacío tras la revocación);
+# roles_token conserva lo que decía el JWT emitido antes.
+# Esperado: 200 OK
+# {"usuario": {"id": 3, "email": "recepcion@example.com", "nombre": "Recepción",
+#  "debe_cambiar_password": false},
+#  "roles_vigentes": [], "roles_token": ["RECEPCION"]}
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-07: el listado de roles ya no la muestra (sólo vigentes)
+# La fila revocada sigue existiendo en la base con revocada_en = <fecha>;
+# acá sólo se listan las vigentes (D1). Lo comprueba además
+# test/pytest/autorizacion/test_roles.py::test_revocacion_surte_efecto_en_sesion_abierta.
+# Esperado: 200 OK
+# {"items": []}
+GET {{baseUrl}}/usuarios/3/roles
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-07: el evento de la revocación queda registrado (DD-26)
+# Esperado: 200 OK — dos eventos: la revocación arriba y el seed abajo
+# {"items": [
+#   {"id": 2, "cuando": "<fecha>", "actor": "admin@example.com",
+#    "accion": "Rol RECEPCION revocado a 3"},
+#   {"id": 1, "cuando": "<fecha del seed>", "actor": "SISTEMA",
+#    "accion": "Carga de los datos iniciales"}
+# ], "total": 2, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/eventos
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-07: vencimiento en el pasado — 422 (RT-SE-11)
+# El validador del contrato exige zona horaria y una fecha futura; la respuesta
+# HTTP traduce el rechazo a un mensaje humano sin repetir la entrada (S-9).
+# Esperado: 422 Unprocessable Entity
+# {"detail": [{"msg": "Revisá los datos enviados: hay un valor no válido."}]}
+POST {{baseUrl}}/usuarios/6/roles
+Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+{"rol": "MECANICO", "vence_en": "2020-01-01T00:00:00+00:00"}
+
+### C-07: vencimiento sin zona horaria — 422 (RT-SE-11)
+# Mismo contrato: sin offset no se acepta, aunque la fecha sea futura.
+# Esperado: 422 Unprocessable Entity
+# {"detail": [{"msg": "Revisá los datos enviados: hay un valor no válido."}]}
+POST {{baseUrl}}/usuarios/6/roles
+Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+{"rol": "MECANICO", "vence_en": "2030-01-01T00:00:00"}
+
+### C-08: el admin no se revoca su propio ADMIN (RN-05)
+# La autoprotección se evalúa antes que el conteo de administradores.
+# Esperado: 409 Conflict
+# {"detail": "No podés revocar tu propio rol de administrador."}
+DELETE {{baseUrl}}/usuarios/1/roles/ADMIN
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-08: revocar el ADMIN de otro admin está permitido mientras quede uno
+# Queda sólo admin@example.com vigente (2 → 1). Llegar a cero es imposible en
+# flujo secuencial: la rama «quedar sin administradores» es defensiva y la
+# cubren test_roles.py::test_revocar_otro_admin_cuando_quedan_dos_da_200 y
+# test_count_admins_vigentes_ignora_revocados_y_vencidos.
+# Esperado: 200 OK
+# {"mensaje": "Rol ADMIN revocado"}
+DELETE {{baseUrl}}/usuarios/2/roles/ADMIN
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-09: login del usuario con el cambio de contraseña pendiente
+# @name loginPendiente
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Sesión iniciada", "debe_cambiar_password": true, "expira_en_segundos": 1800}
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"nuevo@example.com","password":"{{passwordPendiente}}"}
+
+### C-09: bloqueado en todo el grupo protegido (RN-06)
+# nuevo@ es MECANICO y leería repuestos, pero la dependencia del grupo se
+# resuelve antes que la del rol: el cambio pendiente manda (D2).
+# Esperado: 403 Forbidden
+# {"detail": "Tenés que cambiar tu contraseña antes de continuar."}
+GET {{baseUrl}}/repuestos
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+### C-09: /auth sigue abierto con la cookie pendiente
+# Esperado: 200 OK
+# {"usuario": {"id": 7, "email": "nuevo@example.com", "nombre": "Nuevo Mecánico",
+#  "debe_cambiar_password": true},
+#  "roles_vigentes": ["MECANICO"], "roles_token": ["MECANICO"]}
+GET {{baseUrl}}/auth/yo
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+### C-09: y /health también (grupo abierto, ni siquiera pide sesión)
+# Esperado: 200 OK
+# {"estado": "vivo"}
+GET {{baseUrl}}/health/live
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+### C-09: cambio permitido con la bandera pendiente (RN-07)
+# @name cambioPassword
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Contraseña actualizada", "debe_cambiar_password": false, "expira_en_segundos": 1800}
+# Cookie de reemplazo sólo tras el commit; sin esperas artificiales entre el
+# login y el cambio (la validación de iat no trunca el segundo).
+POST {{baseUrl}}/auth/cambiar-password
+Content-Type: application/json
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+{"password_actual":"{{passwordPendiente}}","password_nueva":"{{passwordNueva}}"}
+
+### C-09: la cookie anterior da 401 de inmediato en el grupo protegido
+# iat anterior a password_cambiada_en; no hace falta esperar un segundo.
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+GET {{baseUrl}}/repuestos
+Cookie: {{loginPendiente.response.headers.Set-Cookie}}
+
+### C-09: la cookie nueva pasa el bloqueo y entra por el rol MECANICO
+# Esperado: 200 OK — los cuatro repuestos del seed, igual que el bloque C-07
+# {"items": [
+#   {"id": 1, "codigo": "FIL-001", "descripcion": "Filtro de aceite", "precio": "8500.00", "stock": 10},
+#   {"id": 2, "codigo": "FRE-010", "descripcion": "Pastillas de freno delanteras", "precio": "32000.00", "stock": 4},
+#   {"id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido", "precio": "6500.00", "stock": 2},
+#   {"id": 4, "codigo": "ACE-530", "descripcion": "Aceite 5W30 por litro", "precio": "12000.00", "stock": 20}
+# ], "total": 4, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/repuestos
+Cookie: {{cambioPassword.response.headers.Set-Cookie}}
+
+### C-09: la bandera quedó limpia en la identidad nueva
+# Esperado: 200 OK
+# {"usuario": {"id": 7, "email": "nuevo@example.com", "nombre": "Nuevo Mecánico",
+#  "debe_cambiar_password": false},
+#  "roles_vigentes": ["MECANICO"], "roles_token": ["MECANICO"]}
+GET {{baseUrl}}/auth/yo
+Cookie: {{cambioPassword.response.headers.Set-Cookie}}

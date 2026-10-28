@@ -1,1 +1,12 @@
-"""Unit of Work del módulo, con los repositorios que sus operaciones necesitan del módulo ordenes (OrdenTrabajo, EstadoOrden, ItemOrden e HistorialEstadoOrden). Se completa en EJ-2 (modelos) y EJ-6 (órdenes y Unit of Work)."""
+"""Unit of Work mínimo del módulo ordenes (EJ-5, T-2); EJ-6 lo completa."""
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.unit_of_work import UnitOfWork
+from app.modules.ordenes.repository import OrdenRepository
+
+
+class UnitOfWorkOrden(UnitOfWork):
+    def __init__(self, sesion: AsyncSession) -> None:
+        super().__init__(sesion)
+        self.ordenes = OrdenRepository(sesion)

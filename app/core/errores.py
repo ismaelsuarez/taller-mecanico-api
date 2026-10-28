@@ -1,4 +1,4 @@
-"""Errores de dominio (401/404/409/429) y validación de peticiones (422).
+"""Errores de dominio (401/403/404/409/429) y validación de peticiones (422).
 
 El dominio conserva sus mensajes propios. La validación se traduce sin devolver
 entrada, ubicaciones técnicas ni texto interno del validador (RN-18, S-9).
@@ -48,6 +48,13 @@ class EnConflicto(ErrorDeDominio):
 
 class NoAutenticado(ErrorDeDominio):
     """Credenciales rechazadas con mensaje público → 401."""
+
+
+class NoAutorizado(ErrorDeDominio):
+    """Permisos insuficientes con mensaje humano → 403 (DD-25)."""
+
+    def __init__(self, mensaje: str = "No tenés permiso para realizar esta acción.") -> None:
+        super().__init__(mensaje)
 
 
 class DemasiadosIntentos(ErrorDeDominio):
@@ -143,6 +150,10 @@ def registrar_traductores(app: FastAPI) -> None:
     @app.exception_handler(NoAutenticado)
     async def _traducir_no_autenticado(request: Request, error: NoAutenticado) -> JSONResponse:
         return JSONResponse(status_code=401, content={"detail": str(error)})
+
+    @app.exception_handler(NoAutorizado)
+    async def _traducir_no_autorizado(request: Request, error: NoAutorizado) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(error)})
 
     @app.exception_handler(NoEncontrado)
     async def _traducir_no_encontrado(request: Request, error: NoEncontrado) -> JSONResponse:

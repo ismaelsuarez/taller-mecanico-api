@@ -26,7 +26,6 @@ from app.modules.repuestos.schemas import (
     RepuestoReponer,
 )
 from app.modules.repuestos.unit_of_work import UnitOfWorkRepuesto
-from app.modules.usuarios.models import Usuario
 
 
 async def listar_repuestos(
@@ -50,7 +49,7 @@ async def obtener_repuesto(
 
 
 async def crear_repuesto(
-    uow: UnitOfWorkRepuesto, datos: RepuestoCrear, actor: Usuario
+    uow: UnitOfWorkRepuesto, datos: RepuestoCrear, usuario_id: int
 ) -> RepuestoLectura:
     """Alta con stock inicial; el movimiento «Stock inicial» sale del punto único (T-3)."""
     async with uow:
@@ -66,13 +65,13 @@ async def crear_repuesto(
             raise EnConflicto("Ya existe un repuesto con ese código.") from None
         if datos.stock_inicial > 0:
             await uow.repuestos.registrar_movimiento(
-                repuesto, datos.stock_inicial, "Stock inicial", actor.id
+                repuesto, datos.stock_inicial, "Stock inicial", usuario_id
             )
     return RepuestoLectura.model_validate(repuesto, from_attributes=True)
 
 
 async def actualizar_repuesto(
-    uow: UnitOfWorkRepuesto, repuesto_id: int, datos: RepuestoActualizar, actor: Usuario
+    uow: UnitOfWorkRepuesto, repuesto_id: int, datos: RepuestoActualizar, usuario_id: int
 ) -> RepuestoLectura:
     """Precio y descripción en una sola transacción con su historial (RN-20)."""
     async with uow:
@@ -84,7 +83,7 @@ async def actualizar_repuesto(
             setattr(repuesto, campo, valor)
         await uow.repuestos.update(repuesto)
         await uow.precios.add_si_hubo_cambio(
-            repuesto, precio_anterior, repuesto.precio, actor.id
+            repuesto, precio_anterior, repuesto.precio, usuario_id
         )
     return RepuestoLectura.model_validate(repuesto, from_attributes=True)
 
@@ -99,7 +98,7 @@ async def borrar_repuesto(uow: UnitOfWorkRepuesto, repuesto_id: int) -> None:
 
 
 async def reponer_repuesto(
-    uow: UnitOfWorkRepuesto, repuesto_id: int, datos: RepuestoReponer, actor: Usuario
+    uow: UnitOfWorkRepuesto, repuesto_id: int, datos: RepuestoReponer, usuario_id: int
 ) -> RepuestoLectura:
     """`stock += cantidad` y movimiento positivo juntos (RN-14, T-3)."""
     async with uow:
@@ -109,7 +108,7 @@ async def reponer_repuesto(
         if repuesto.stock + datos.cantidad > MAXIMO_STOCK:
             raise EnConflicto("La reposición supera el máximo de existencias permitido.")
         await uow.repuestos.registrar_movimiento(
-            repuesto, datos.cantidad, datos.motivo, actor.id
+            repuesto, datos.cantidad, datos.motivo, usuario_id
         )
     return RepuestoLectura.model_validate(repuesto, from_attributes=True)
 

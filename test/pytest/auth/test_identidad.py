@@ -143,20 +143,36 @@ async def test_yo_refleja_roles_revocados_vencidos_y_sin_roles(
         assert await estado_guardado(aplicacion_auth) == antes
 
 
-async def test_cookie_registro_habilita_yo_y_c01_conserva_422(api_auth, aplicacion_auth):
+async def test_cookie_registro_habilita_yo_y_c01_conserva_422(
+    api_auth, aplicacion_auth, crear_usuario_auth,
+):
     registro = await api_auth.post("/auth/registro", json={
         "email": "registro-yo@example.com", "password": secrets.token_hex(16),
         "nombre": "Cliente HTTP", "documento": "IDENTIDAD-1", "telefono": "12345",
     })
     assert registro.status_code == 201
-    antes = await estado_guardado(aplicacion_auth)
     respuesta = await api_auth.get("/auth/yo")
     assert respuesta.status_code == 200
     assert respuesta.json() == {
-        "usuario": {"id": antes[0][0]["id"], "email": "registro-yo@example.com",
+        "usuario": {"id": (await estado_guardado(aplicacion_auth))[0][0]["id"],
+                    "email": "registro-yo@example.com",
                     "nombre": "Cliente HTTP", "debe_cambiar_password": False},
         "roles_vigentes": ["CLIENTE"], "roles_token": ["CLIENTE"],
     }
+    # EJ-5: /clientes exige rol de personal; el CLIENTE registrado recibe 403
+    # antes de que se valide el parámetro de ruta.
+    denegada = await api_auth.get("/clientes/no-entero")
+    assert denegada.status_code == 403
+
+    # C-01: con un rol con permiso, el path inválido sigue respondiendo 422.
+    admin, password = await crear_usuario_auth(
+        email="admin-c01@example.com", roles=("ADMIN",),
+    )
+    login = await api_auth.post(
+        "/auth/login", json={"email": admin.email, "password": password},
+    )
+    assert login.status_code == 200, login.text
+    antes = await estado_guardado(aplicacion_auth)
     invalida = await api_auth.get("/clientes/no-entero")
     assert invalida.status_code == 422
     assert invalida.json() == {"detail": [{"msg": "Ingresá un número entero para el cliente seleccionado."}]}

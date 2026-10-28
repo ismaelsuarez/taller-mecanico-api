@@ -58,6 +58,16 @@ Notas:
 | Cambio de contraseña pendiente y ruta protegida | **403** | control montado en el grupo protegido (RN-06) |
 | Autenticado pero el recurso no es propio (`/ordenes/{id}`, cancelar) | **403** | servicio (comprobación de dueño, RN-17 / RN-12) |
 
+## Controles y su orden (EJ-5)
+
+Tres controles separados, en este orden de intención (DD-50):
+
+1. **Identidad** (`get_usuario_actual`, grupo abierto y protegido): cookie única → 401 ante cualquier fallo.
+2. **Cambio obligatorio** (dependencia del grupo protegido, montada una sola vez en `main.py`): `debe_cambiar_password = true` → 403 en toda ruta del grupo y sólo de él.
+3. **Rol** (`requiere_rol(*roles)`): por ruta según la matriz; consulta los roles vigentes **en la base, en cada petición** (sin caché, sin mirar el JWT) → 403 si falta el rol requerido.
+
+Sin sesión siempre hay 401 antes que cualquier 403. Revocar o dejar vencer un rol surte efecto en la siguiente petición de una sesión abierta (C-07).
+
 ## Rutas públicas
 
 - `GET /health/live`

@@ -258,6 +258,31 @@
 
 **Evidencia acotada**: RED HTTP 404 del implementador; verificación final focalizada de cambio + registro: 45 aprobadas, 0 omitidas, incluidas las aserciones adicionales de evento flusheado/emisor no llamado. El host ejecutó una sola secuencia preparada por el verificador independiente: suite completa **595 aprobadas, 0 omitidas, 132 advertencias conocidas de fixture JWT** (122.34 s), **28 bloques TCP** tras migración/seed aislados (12 intentos, cuatro eventos) y diferencial de **48 solicitudes por versión** contra `c36b50e` para registro/login con Secure activado/desactivado. Exit/stdout/stderr coinciden normalizando únicamente sales bcrypt verificadas, fechas conscientes de zona y JWT/tiempos validados; no se comparan JWT crudos como si fueran deterministas. Dictamen independiente PASS para 6.1–6.3 y evidencia funcional/seguridad integrada, sin nuevos hallazgos graves. La revisión nativa se registra por separado en ODD; esta evidencia no autoriza EJ-5 ni publicación.
 
+### DD-49 — Contratos de autorización y administración (EJ-5, D1)
+**Decisión del equipo / supuesto complementario (D-4)**: adoptar las formas propuestas en [D1](../openspec/changes/05-autorizacion/design.md#d1--formas-de-respuesta-propuestas), sin atribuir a la consigna las claves que no fija. Los contratos viven en `app/modules/usuarios/schemas.py`.
+
+| Operación | Entrada | Salida |
+|---|---|---|
+| `POST /usuarios` 201 | `{email, nombre, password_provisoria, rol}` — `rol` ∈ ADMIN/RECEPCION/MECANICO (`CLIENTE` → 422) | `UsuarioLectura` de EJ-4 (`{id, email, nombre, debe_cambiar_password}`), sin hash ni contraseña |
+| `GET /usuarios/{id}/roles` 200 | Sin cuerpo | `{"items":[{rol, desde, vence_en, otorgada_por}]}` — sólo vigentes, sin paginación |
+| `POST /usuarios/{id}/roles` 201 | `{rol, vence_en?}` — `rol` ∈ los cuatro del CHECK; `vence_en` con zona y futuro si viene | La asignación creada: `{rol, desde, vence_en, otorgada_por}` |
+| `DELETE /usuarios/{id}/roles/{rol}` 200 | Sin cuerpo | `{"mensaje":"Rol MECANICO revocado"}` (Flujo 5 fija 200, no 204) |
+| `GET /eventos` 200 | Query de página | Envoltorio estándar `{items, total, page, size, pages}` con `items: [{id, cuando, actor, accion}]` |
+| `GET /mis-vehiculos`, `GET /mis-ordenes` 200 | Query de página | Envoltorio estándar; página fuera de rango → 422 |
+
+Todos con `extra="forbid"`; ningún 401/403 expone texto interno (DD-25). `POST /usuarios/{id}/roles` acepta `CLIENTE`: la restricción `CLIENTE` → 422 pertenece sólo al cuerpo de `POST /usuarios` (DD-18).
+**Estado de implementación**: contratos y sus validaciones (`vence_en` con zona y futuro) implementados y probados en el Grupo 1 de EJ-5; los endpoints se implementan en los grupos 4–6.
+
+### DD-50 — Controles de autorización y roles por petición (EJ-5, D2/D3)
+**Decisión del equipo / detalle complementario (D-4)**: los tres controles de [D2](../openspec/changes/05-autorizacion/design.md#d2--dependencias-de-autorización-y-dónde-se-aplica-cada-control) y la consulta de roles de [D3](../openspec/changes/05-autorizacion/design.md#d3--roles-vigentes-por-petición-sin-caché):
+
+1. **Identidad** — `get_usuario_actual` (`app/core/dependencies.py`): cookie única; cualquier fallo → 401 con el mensaje seguro de DD-47.
+2. **Cambio obligatorio** — dependencia del grupo protegido montada una sola vez en `main.py` (DD-10): `debe_cambiar_password = true` → 403; `/auth/*` y `/health/*` quedan fuera del grupo.
+3. **Rol** — `requiere_rol(*roles)`: dependencia de fábrica aplicada **por ruta** según la matriz; consulta los roles vigentes (`revocada_en IS NULL` y `vence_en` nulo o futuro) en **cada petición** con `UsuarioRepository.get_roles_vigentes`, sin caché y sin leer los roles del JWT (RN-04). Devuelve la identidad; sin el rol → 403.
+
+La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por rol. `/mis-*` sólo reciben sesión (RN-17). El coste aceptado de una consulta extra por petición es lo que hace que revocar surta efecto de inmediato (C-07).
+**Estado de implementación**: `requiere_rol` y `get_roles_vigentes` implementados y probados en el Grupo 2 de EJ-5; la protección de las rutas existentes llega en el Grupo 3.
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos
