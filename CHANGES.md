@@ -207,7 +207,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 4 — Seguridad
 
 ### [EJ-4] `04-autenticacion`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado y archivado (2026-10-27; 595 tests, 0 omitidos; 28 casos HTTP)
 - **Ejercicio / puntos**: Ejercicio 4 — 16 pts (16 %)
 - **Scope**:
   - `app/core/security.py`: bcrypt **siempre fuera del bucle** (`asyncio.to_thread`) y bajo `asyncio.Semaphore(BCRYPT_MAX_CONCURRENCY)`, costo desde `Settings`; emisión y verificación de JWT con PyJWT (`sub`, `iat` con fracción de segundo, `exp`, roles vigentes al emitir).
