@@ -29,7 +29,7 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 - [x] 4.1 RED/GREEN: `EstadoOrdenRepository` que no hereda de `BaseRepository` ni ofrece `add`/`update`/`delete`, con `get_all_por_posicion` y `get_by_codigo`; triangular con catálogo vacío y con el seed.
 - [x] 4.2 RED/GREEN: `EstadoOrdenCodigo` (`StrEnum`) y `EstadoOrdenLectura`; test de alineación contrato ↔ catálogo sembrado (mismos cuatro códigos).
-- [ ] 4.3 RED/GREEN: `GET /estados-orden` en el grupo protegido sin `requiere_rol` (200 por posición para ADMIN y CLIENTE, 401 sin sesión, 403 con cambio pendiente; `POST`/`PATCH`/`DELETE` rechazados y OpenAPI sólo con `GET`; el catálogo no cambia). Agregar a `test/ordenes.http` el bloque C-17 (catálogo con sesión y sin sesión) y documentar la ruta en el README.
+- [x] 4.3 RED/GREEN: `GET /estados-orden` en el grupo protegido sin `requiere_rol` (200 por posición para ADMIN y CLIENTE, 401 sin sesión, 403 con cambio pendiente; `POST`/`PATCH`/`DELETE` rechazados y OpenAPI sólo con `GET`; el catálogo no cambia). Agregar a `test/ordenes.http` el bloque C-17 (catálogo con sesión y sin sesión) y documentar la ruta en el README.
 
 ## 5. Punto único de escritura de stock con guarda
 
@@ -42,7 +42,7 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 - [x] 6.2 RED/GREEN `POST /ordenes` (RECEPCION/ADMIN) en un solo bloque (D6): 201 de C-10 con precios copiados, subtotales, total `68000.00` e historial `null → PENDIENTE` firmado por la recepción; triangular el precio congelado tras un PATCH de precio. Probar 409 sin filas para repuesto inexistente/dado de baja, vehículo inexistente/dado de baja, catálogo vacío y total fuera de rango; 422 para precio/total/estado en el cuerpo, ítems vacíos o repetidos; 403 para MECANICO/CLIENTE.
 - [x] 6.3 RED/GREEN `GET /ordenes` (ADMIN/RECEPCION/MECANICO): paginado por id, filtro `estado` con `total` del mismo filtro, `estado` no declarado → 422 (C-17), 403 para CLIENTE; `/mis-ordenes` sin cambio de contrato.
 - [x] 6.4 RED/GREEN `GET /ordenes/{id}`: detalle completo de la orden 2 (ítems, repuesto, historial cronológico), 404 inexistente, 422 id no entero; personal ve cualquiera (DD-27), cliente dueño 200 (también con vehículo dado de baja, DD-28), cliente ajeno 403, sin sesión 401 (C-06 completo).
-- [ ] 6.5 Agregar a `test/ordenes.http` los bloques C-17 (filtro válido e inválido), C-10 (201 y 409 con la orden no creada) y C-06 (200 propia, 403 ajena, 200 de `mecanico2` en una orden no asignada); documentar las rutas en el README y registrar en la KB (D-4) los contratos de D1 como DD nueva.
+- [x] 6.5 Agregar a `test/ordenes.http` los bloques C-17 (filtro válido e inválido), C-10 (201 y 409 con la orden no creada) y C-06 (200 propia, 403 ajena, 200 de `mecanico2` en una orden no asignada); documentar las rutas en el README y registrar en la KB (D-4) los contratos de D1 como DD nueva.
 
 ## 7. Transiciones: iniciar y cancelar
 

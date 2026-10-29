@@ -184,10 +184,14 @@ La lectura termina antes de verificar/calcular bcrypt (hilo y semáforo existent
 | `POST/PATCH/DELETE /repuestos`, `/reponer`, `/movimientos`, `/precios` | ADMIN |
 | `POST /usuarios`, `GET/POST /usuarios/{id}/roles`, `DELETE /usuarios/{id}/roles/{rol}`, `GET /eventos` | ADMIN |
 | `GET /mis-vehiculos`, `GET /mis-ordenes` | Cualquier sesión (sólo lo propio; vacío sin ficha — SU-11) |
+| `POST /ordenes` | ADMIN, RECEPCION |
+| `GET /ordenes` | ADMIN, RECEPCION, MECANICO |
+| `GET /ordenes/{id}` | Cualquier sesión: el personal ve cualquiera, el dueño del vehículo la suya (403 si no — C-06) |
+| `GET /estados-orden` | Cualquier sesión |
 
 El alta de personal (`POST /usuarios`) crea usuario + asignación de rol (`otorgada_por` = admin) + evento en un solo UoW, con `debe_cambiar_password = true` (DD-18). Revocar un rol escribe `revocada_en` sin borrar la fila y surte efecto en la siguiente petición de la sesión abierta (C-07); la autoprotección RN-05 impide revocar el propio ADMIN o quedar sin administradores. Los eventos de seguridad se consultan paginados en `GET /eventos` (ADMIN).
 
-El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) queda listo para el 403 de orden ajena de EJ-6 (T-8). El reemplazo del actor temporal garantiza que `movimiento_stock` e `historial_precio_repuesto` firman con el usuario autenticado; sin sesión no se escribe nada.
+El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) decide el 403 de orden ajena en `GET /ordenes/{id}` (T-8, EJ-6). El reemplazo del actor temporal garantiza que `movimiento_stock` e `historial_precio_repuesto` firman con el usuario autenticado; sin sesión no se escribe nada.
 
 **Pruebas:** `test/pytest/autorizacion/` (104 pruebas: schemas, identidad, protección de rutas, roles, alta personal, eventos/lo propio) y `test/autorizacion.http` (C-06 parcial, C-07, C-08, C-09 completo). C-18 (recepción 403 al cambiar precio sin línea de historial) vive en `test/repuestos.http`. La suite completa dio **697 aprobadas + 2 fallos ambientales conocidos de Windows/loopback** (sin relation con el producto; ver `odd/tasks/05-autorizacion.md` L2).
 
@@ -241,6 +245,19 @@ Ejemplo ejecutable: `test/auth.http`, con contraseña efímera desde `REGISTRO_P
 Los precios del alta y PATCH admiten valores exactos entre **0.01 y 99999999.99**, con hasta dos decimales significativos: no se redondean entradas como `0.001`. Los ceros finales equivalentes (`12.3400`) sí se admiten. `stock_inicial` va de **0 a 2147483647** y la cantidad de reposición de **1 a 2147483647**. Fuera de esos límites se responde **422**, sin escrituras; si una cantidad válida sumada al stock actual supera el máximo, se responde **409** sin modificar stock ni movimientos.
 
 Todos los listados devuelven el envoltorio `{items, total, page, size, pages}`; `size` va de 1 a 100 (20 por defecto) y una página fuera de rango responde 422 con el mensaje «La página N no existe: hay M».
+
+### Órdenes de trabajo y catálogo de estados (EJ-6)
+
+| Método | Ruta | Quién | Qué hace |
+|---|---|---|---|
+| GET | `/estados-orden` | Cualquier sesión | Catálogo de los cuatro estados por `posicion` (`codigo`, `descripcion`, `posicion`, `es_final`): 200 / 401 / 403 con cambio de contraseña pendiente. Es de sólo lectura: `POST`/`PUT`/`PATCH`/`DELETE` responden 405 y el catálogo no cambia |
+| POST | `/ordenes` | ADMIN, RECEPCION | Alta en `PENDIENTE`: 201 con el detalle; 422 (cuerpo con precio, total o estado, sin ítems, repuestos repetidos o cantidades no positivas); 409 (vehículo o repuesto inexistente o dado de baja, catálogo sin `PENDIENTE`, total fuera de rango) sin dejar filas; 403 para MECANICO y CLIENTE |
+| GET | `/ordenes` | ADMIN, RECEPCION, MECANICO | Listado paginado por id con filtro `?estado=` (`PENDIENTE`, `EN_REPARACION`, `TERMINADA`, `CANCELADA`; otro valor responde 422); `total` cuenta con el mismo filtro. 403 para CLIENTE |
+| GET | `/ordenes/{id}` | Cualquier sesión | Detalle con patente, cliente, ítems (código y descripción del repuesto), subtotales e historial cronológico: 200 / 404 (también un id fuera del rango de enteros) / 422 (id no entero) / 403 si no es personal ni dueño del vehículo (C-06) |
+
+El alta recibe sólo `{vehiculo_id, falla, items: [{repuesto_id, cantidad}]}`: el precio de cada ítem se copia del repuesto al crear la orden (un cambio de precio posterior no la toca) y el total lo calcula el servidor. La orden, sus ítems y la primera línea de historial (`null → PENDIENTE`, firmada por quien la crea) se confirman en un solo bloque; el stock no baja hasta terminarla.
+
+**Casos manuales:** `test/ordenes.http` reúne C-17 (catálogo y filtro), C-10 (alta y 409) y C-06 (detalle propio, ajeno y de un mecánico). Pasos: levantar la API, correr `python seed.py` sobre la misma base, definir `PASSWORD_ADMIN`, `PASSWORD_RECEPCION`, `PASSWORD_MECANICO` y `PASSWORD_CLIENTE` con las contraseñas del seed (nunca en el archivo) y ejecutar los bloques **en orden**, porque las altas cambian el estado de la base; volvé a correr `python seed.py` antes de repetir el archivo. Pruebas automatizadas: `test/pytest/ordenes/`.
 
 ## Primer uso después de clonar (una sola vez)
 
