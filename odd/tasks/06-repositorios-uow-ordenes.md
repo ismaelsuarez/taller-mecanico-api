@@ -14,10 +14,14 @@ Reglas duras de `CLAUDE.md` (A-*, B-*, S-*, D-*, E-*); Strict TDD (RED → GREEN
 
 ## Tasks (grupos de `tasks.md` ↔ IDs estables)
 
-- T1 [done] — Grupo 1: preparación y red de seguridad (1.1, 1.2). Ruta: inline (comandos de estado/entorno) + suite completa en segundo plano. Commit: ver Log L4.
+- T1 [done] — Grupo 1: preparación y red de seguridad (1.1, 1.2). Ruta: inline (comandos de estado/entorno) + suite completa en segundo plano. Commit `532d109`.
   - 1.1: `bash scripts/setup.sh` restauró las skills de dominio (ver L1); leídas `tdd`, `work-unit-commits`, resto aplicadas por rutas de `.agents/skills/`.
   - 1.2: este documento + baseline de la suite completa (L3).
-- T2 [ ] — Grupo 2: UoW base y auditoría de la jerarquía (2.1-2.4). Ruta: inline (tareas mecánicas pequeñas, un archivo de producción y su test por tarea).
+- T2 [done] — Grupo 2: UoW base y auditoría de la jerarquía (2.1-2.4). Ruta: inline (tareas mecánicas pequeñas, un archivo de producción y su test por tarea). Commit: ver Log L5.
+  - 2.1: `TestCommitFallido` (5 UoW × 2 errores): RED 6 fallos (Base/Cliente/Repuesto, `in_transaction` seguía abierta) → GREEN con el rollback del commit fallido en `UnitOfWork.__aexit__`; overrides de `UnitOfWorkUsuario`/`UnitOfWorkIntentoAcceso` eliminados (esos 4 casos ya pasaban antes y siguen en verde); `test/pytest/auth/` íntegro en verde.
+  - 2.2: `test/pytest/test_capas.py` (AST): único `commit(` en el UoW base, servicios no construyen UoW, routers sin SQL (pasan); servicios sin SQL falla hoy por `ordenes/service.py::_es_dueno_del_vehiculo` (RED observado) y queda `xfail(strict=True)` hasta 3.2. `app/modules/health/router.py` (`SELECT 1` de readiness) queda fuera: no es módulo con datos.
+  - 2.3: `TestJerarquiaAuditada` (firma `(sesion, modelo)`, seis métodos async, base sin borrado lógico, subclase con `get_by_id_including_deleted`/`soft_delete`, `add` con id y deshecho al revertir × 2 entidades). Auditoría de código existente: pasan de inmediato (RED no aplica; sin cambios de producción en `repository.py`).
+  - 2.4: `test_atomicidad_bloques.py`: RN-02 (falla en `eventos.add` y en `clientes.add` → 0 filas) y RN-20 (falla en el historial con 2 conjuntos de datos → precio y descripción intactos, 0 líneas) con controles de éxito. Auditoría: ya estaban en un bloque; pasan de inmediato.
 - T3 [ ] — Grupo 3: repositorios de `ordenes` y reubicación de consultas (3.1-3.4). Ruta: inline (archivos de producción: `ordenes/repository.py`, `ordenes/unit_of_work.py`, `clientes/{repository,unit_of_work,service}`, `ordenes/service.py`).
 - T4 [ ] — Grupo 4: catálogo de estados y `GET /estados-orden` (pendiente de otro tramo).
 - T5 [ ] — Grupo 5: punto único de stock con guarda (pendiente).
@@ -38,7 +42,7 @@ C-06 completo, C-10, C-11, C-12 (sin aviso), C-13, C-17 en `test/ordenes.http`; 
 
 ## Progreso
 
-Tramo actual: grupos 1-3. Ver Log.
+Tramo actual: grupos 1-3. G1 y G2 cerrados (ver Log L4/L5).
 
 ## Evidencia de verificación
 
@@ -53,3 +57,4 @@ Cerrar grupos 1-3 y continuar con el grupo 4 en otro tramo.
 - L1: Apertura del tramo. `bash scripts/setup.sh` restauró las 18 skills de dominio en `.agents/skills/` (enlazadas en `.claude/skills/`, 23 en total) y configuró `core.hooksPath=.githooks`; `skills-lock.json` quedó con hashes recalculados distintos (ruido de fin de línea en Windows) y se revirtió con `git checkout` para no ensuciar el commit. El registro `.atl/skill-registry.md` no indexa las skills de dominio: resolución por rutas de `.agents/skills/` (`skill_resolution: fallback-path`, degradada pero auditable).
 - L2: Entorno de pruebas ausente en esta máquina al iniciar (clon fresco: sin `.env`, sin paquetes de Python en el intérprete 3.13 global, sin contenedor PostgreSQL del proyecto). Para no tocar `.env` (prohibido en este tramo) se montó un entorno efímero fuera del repo: venv en el scratchpad de la sesión con `requirements.txt` y un contenedor `postgres:16` (`taller-pg-test`, 127.0.0.1:55432, credenciales descartables, bases `taller` y `taller_test`), con las variables pasadas por entorno de proceso (`POSTGRES_*`, `JWT_SECRET`, `BCRYPT_ROUNDS=4`). El puerto 5432 está bloqueado por permisos de Windows (socket no permitido), de ahí el 55432. Nada de esto entra al repo.
 - L3: Baseline de la suite completa (sobre PostgreSQL 16 aislada, esquema Alembic): 697 passed + 2 failed ambientales conocidos (mismos nombres que EJ-5 L2), 0 skipped, 4:40 min. Sin tocar umbrales ni pruebas.
+- L4: Grupo 1 commiteado como `532d109` (artefactos del change, documento ODD, baseline).

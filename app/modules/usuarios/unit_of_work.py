@@ -1,4 +1,7 @@
-"""UoW de usuarios e intentos; cada sesión pertenece a su dependencia, no al UoW."""
+"""UoW de usuarios e intentos; cada sesión pertenece a su dependencia, no al UoW.
+
+El rollback de un commit fallido lo hace el `UnitOfWork` base (EJ-6, D4).
+"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,14 +23,6 @@ class UnitOfWorkUsuario(UnitOfWork):
         self.clientes = ClienteRepository(sesion)
         self.eventos = EventoSeguridadRepository(sesion)
 
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
-        try:
-            return await super().__aexit__(exc_type, exc, tb)
-        except Exception:
-            # El commit también puede fallar: no depender del cierre de get_session.
-            await self.sesion.rollback()
-            raise
-
 
 class UnitOfWorkIntentoAcceso(UnitOfWork):
     """Confirma sólo intentos; recibe una sesión distinta de la petición normal."""
@@ -35,11 +30,3 @@ class UnitOfWorkIntentoAcceso(UnitOfWork):
     def __init__(self, sesion: AsyncSession) -> None:
         super().__init__(sesion)
         self.intentos = IntentoAccesoRepository(sesion)
-
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
-        try:
-            return await super().__aexit__(exc_type, exc, tb)
-        except Exception:
-            # También un commit fallido revierte antes de devolver el control.
-            await self.sesion.rollback()
-            raise

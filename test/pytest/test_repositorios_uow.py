@@ -6,8 +6,11 @@ cierra la sesión. Contra la PostgreSQL real de test, con el esquema creado por
 las migraciones de Alembic (regla A-3).
 """
 
+import inspect
+
 import pytest
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.repository import BaseRepository, SoftDeleteRepository
@@ -15,6 +18,7 @@ from app.core.unit_of_work import UnitOfWork
 from app.modules.clientes.models import Cliente, Vehiculo
 from app.modules.clientes.unit_of_work import UnitOfWorkCliente
 from app.modules.repuestos.unit_of_work import UnitOfWorkRepuesto
+from app.modules.usuarios.unit_of_work import UnitOfWorkIntentoAcceso, UnitOfWorkUsuario
 
 
 @pytest.fixture
@@ -191,3 +195,94 @@ class TestUnitOfWork:
             assert uow.repuestos.sesion is sesion
             assert uow.movimientos.sesion is sesion
             assert uow.precios.sesion is sesion
+
+
+class TestCommitFallido:
+    """La confirmación puede fallar: el UoW base revierte, propaga y no cierra (D4, RT-TX-03)."""
+
+    @pytest.mark.parametrize(
+        "clase_uow",
+        [
+            UnitOfWork,
+            UnitOfWorkCliente,
+            UnitOfWorkRepuesto,
+            UnitOfWorkUsuario,
+            UnitOfWorkIntentoAcceso,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "error",
+        [
+            RuntimeError("commit roto"),
+            OperationalError("COMMIT", {}, Exception("conexión caída")),
+        ],
+        ids=["error-generico", "error-de-base"],
+    )
+    async def test_revierte_propaga_y_no_cierra_la_sesion(
+        self, fabrica_de_sesiones, monkeypatch, clase_uow, error,
+    ):
+        async with fabrica_de_sesiones() as sesion:
+            cerrada = False
+            cerrar_real = sesion.close
+
+            async def cerrar():
+                nonlocal cerrada
+                cerrada = True
+                await cerrar_real()
+
+            async def commit_que_falla():
+                raise error
+
+            monkeypatch.setattr(sesion, "commit", commit_que_falla)
+            monkeypatch.setattr(sesion, "close", cerrar)
+            with pytest.raises(type(error)):
+                async with clase_uow(sesion):
+                    await BaseRepository(sesion, Cliente).add(_cliente())
+                    assert await _contar(sesion, Cliente) == 1  # flush hecho, sin confirmar
+            # Revertido: la transacción abierta por el flush ya no existe y la sesión sigue usable.
+            assert not sesion.in_transaction()
+            assert not cerrada
+            assert (await sesion.execute(text("SELECT 1"))).scalar_one() == 1
+        async with fabrica_de_sesiones() as sesion:
+            assert await _contar(sesion, Cliente) == 0
+
+
+class TestJerarquiaAuditada:
+    """Auditoría contra el Ejercicio 6: dos clases, modelo en el constructor, flush sin commit."""
+
+    SEIS_METODOS = ("get_by_id", "get_all", "count", "add", "update", "delete")
+    SOLO_BORRADO_LOGICO = ("get_by_id_including_deleted", "soft_delete")
+
+    @pytest.mark.parametrize("clase", [BaseRepository, SoftDeleteRepository])
+    def test_el_constructor_recibe_la_sesion_y_la_clase_del_modelo(self, clase):
+        assert list(inspect.signature(clase.__init__).parameters) == ["self", "sesion", "modelo"]
+
+    @pytest.mark.parametrize("clase", [BaseRepository, SoftDeleteRepository])
+    def test_ofrece_los_seis_metodos_asincronicos(self, clase):
+        for nombre in self.SEIS_METODOS:
+            assert inspect.iscoroutinefunction(getattr(clase, nombre)), nombre
+
+    def test_la_base_no_tiene_borrado_logico(self):
+        for nombre in self.SOLO_BORRADO_LOGICO:
+            assert not hasattr(BaseRepository, nombre), nombre
+
+    def test_el_borrado_logico_vive_solo_en_la_subclase(self):
+        assert issubclass(SoftDeleteRepository, BaseRepository)
+        for nombre in self.SOLO_BORRADO_LOGICO:
+            assert nombre in vars(SoftDeleteRepository), nombre
+
+    @pytest.mark.parametrize("modelo", [Cliente, Vehiculo], ids=["cliente", "vehiculo"])
+    async def test_add_asigna_id_con_flush_y_desaparece_al_revertir(
+        self, fabrica_de_sesiones, modelo,
+    ):
+        async with fabrica_de_sesiones() as sesion:
+            dueno = _cliente()
+            await BaseRepository(sesion, Cliente).add(dueno)
+            entidad = dueno
+            if modelo is Vehiculo:
+                entidad = _vehiculo(dueno.id)
+                await BaseRepository(sesion, Vehiculo).add(entidad)
+            assert entidad.id is not None
+            await sesion.rollback()
+        async with fabrica_de_sesiones() as sesion:
+            assert await _contar(sesion, modelo) == 0
