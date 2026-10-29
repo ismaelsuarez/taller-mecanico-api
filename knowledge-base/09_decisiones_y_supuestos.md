@@ -320,6 +320,15 @@ La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por 
 6. **Consecuencia aceptada de la existencia antes que el permiso en `cancelar`**: como el 404 precede al 403, un cliente puede distinguir una orden inexistente (404) de una ajena (403) al cancelar o consultar el detalle por id. Se acepta: los ids son enteros secuenciales visibles en las propias listas y la respuesta 403 no devuelve ningún dato de la orden ajena (C-06, C-13).
 **Origen**: nota de la consigna «la ruta de cancelar no lleva `requiere_rol`», RN-11, RN-12, DD-27, DD-28, DD-31. **Riesgo**: medio (permisos mixtos rol/dueño).
 
+### DD-55 — Consolidación de integridad: sólo agregado demostrado, sin migración nueva (EJ-7, D1–D4)
+**Decisión**, de [D1–D4](../openspec/changes/07-integridad/design.md):
+
+1. **No hay migración nueva**: el disparador de sólo agregado ya lo crea la segunda migración (`a1b2c3d4e5f6`, T-6) y EJ-7 lo audita y lo demuestra; no se reescribe una migración ya aplicada por el equipo. Conflicto registrado: el pedido de planificación mencionaba la segunda migración como entregable de este change; `CHANGES.md` (T-6, scope de EJ-7) prevalece.
+2. **`test/solo_agregado.sql`** apunta a la fila `id = 1` de las tres tablas de auditoría con cambios realistas (seis rechazos del disparador, SQLSTATE `23001`) y a un alta de `orden_trabajo` con un estado inexistente (rechazo de la clave foránea `orden_trabajo_estado_fkey`, `23503`), con `\set ON_ERROR_STOP off` (cada sentencia es su propia transacción) y un `SELECT` final de conteos. Precondición: `python seed.py` antes, porque un trigger `FOR EACH ROW` no actúa sobre un `UPDATE`/`DELETE` que no encuentra filas.
+3. **La suite ejecuta el mismo archivo** (`test/pytest/integridad/test_solo_agregado_sql.py`): lo lee con un separador simple, ejecuta cada sentencia en su propia transacción sobre la base migrada y sembrada, y verifica el SQLSTATE y el nombre de restricción (no el texto del servidor, que depende del idioma). Regla del archivo: comentarios en líneas enteras y ningún `;` dentro de literales. No se invoca el binario `psql` desde pytest.
+4. **Evidencia guardada**: la salida textual de `psql -a` contra la base de test sembrada va en `docs/evidencias/C-14-solo-agregado.txt`; la **captura de pantalla** que pide la entrega la toma una persona al ejecutar el mismo comando (README, «Caso C-14»); no se inventa una captura.
+**Origen**: consigna Ej. 7 (C-14, secciones 6.8.1 y 6.9), RN-15, RN-19, T-6, DD-06. **Riesgo**: bajo (sólo pruebas y evidencia).
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos
@@ -372,3 +381,7 @@ Confirmado por DD-23.
 ### SU-15 — El mecánico asignado necesita el rol MECANICO vigente para terminar
 **Supuesto** (EJ-6, D2): `POST /ordenes/{id}/terminar` exige `requiere_rol("MECANICO","ADMIN")` en la ruta y, en el servicio, ADMIN vigente **o** `mecanico_id == usuario` con el rol MECANICO vigente. Un mecánico que fue asignado y después perdió el rol MECANICO (y no es ADMIN) recibe 403 (RN-04: los permisos salen de los roles vigentes, en cada petición). El rol de ruta precede a la existencia de la orden: RECEPCION y CLIENTE reciben 403 aun con un id inexistente (la consigna lista 403 y 404 para la ruta y RN-12 fija «permiso antes que estado»).
 **Origen**: RN-04, RN-13, DD-31, DD-54. **Riesgo**: bajo. Probado en `test/pytest/ordenes/test_terminar_orden_http.py`.
+
+### SU-16 — `TRUNCATE` y `session_replication_role` no están cubiertos por el disparador
+**Supuesto** (EJ-7, D2): el disparador de sólo agregado es `FOR EACH ROW` sobre `UPDATE`/`DELETE`, como pide la consigna; `TRUNCATE` (a nivel de sentencia) no lo dispara, y `seed.py` depende de eso para recargar las tablas de auditoría. Un superusuario también puede desactivar triggers con `SET session_replication_role = replica`; el TP usa un solo rol de base y DD-06 acepta ese límite. No se corrigen (bloquear `TRUNCATE` rompería el seed) ni se agrega el segundo mecanismo de permisos por rol (la consigna no lo pide).
+**Origen**: consigna 6.9, DD-06, `seed.py::_vaciar`. **Riesgo**: bajo. Documentado en el README («Caso C-14»).

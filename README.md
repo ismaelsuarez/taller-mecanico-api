@@ -198,6 +198,28 @@ El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) decide el 403
 
 **Pruebas:** `test/pytest/autorizacion/` (104 pruebas: schemas, identidad, protección de rutas, roles, alta personal, eventos/lo propio) y `test/autorizacion.http` (C-06 parcial, C-07, C-08, C-09 completo). C-18 (recepción 403 al cambiar precio sin línea de historial) vive en `test/repuestos.http`. La suite completa dio **697 aprobadas + 2 fallos ambientales conocidos de Windows/loopback** (sin relation con el producto; ver `odd/tasks/05-autorizacion.md` L2).
 
+## Caso C-14 (sólo agregado)
+
+`historial_estado_orden`, `movimiento_stock` e `historial_precio_repuesto` son de **sólo agregado** (RN-15): un disparador de la segunda migración rechaza todo `UPDATE` y `DELETE`, venga de la API, de `psql` o de otro cliente. `test/solo_agregado.sql` lo demuestra con seis rechazos del disparador (error `23001`) y un séptimo de la clave foránea del catálogo (`orden_trabajo_estado_fkey`, error `23503`); no cambia ningún dato. Cada sentencia lleva su resultado esperado en un comentario.
+
+**Precondición:** `alembic upgrade head` y `python seed.py` antes. Las sentencias apuntan a la fila `id = 1` del seed; sobre una base vacía no se rechazaría nada (un disparador por fila no actúa si no hay filas) y no sería evidencia. Usá la base de test (`POSTGRES_TEST_DB`).
+
+```bash
+# Sin Docker (venv; psql toma la contraseña de la variable de entorno PGPASSWORD):
+psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a -f test/solo_agregado.sql
+
+# Con Docker (el contenedor db ya tiene las variables del .env):
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a' < test/solo_agregado.sql
+```
+
+`-a` muestra cada sentencia junto a su error: esa salida es la evidencia.
+
+- **Resultado esperado:** seis `ERROR: La tabla … es de sólo agregado: no se puede modificar ni borrar.`, un `violates foreign key constraint "orden_trabajo_estado_fkey"` y un último `SELECT` con las cantidades sin cambios (`3 | 4 | 1 | 2` tras el seed).
+- **Captura para la entrega:** ejecutá el comando en una terminal y sacá la captura de pantalla con los siete errores y el `SELECT` final a la vista; no se genera automáticamente.
+- **Evidencia textual de referencia:** `docs/evidencias/C-14-solo-agregado.txt`. Si la guardás vos con una redirección a archivo, agregá `stdbuf -o0` antes de `psql` y `2>&1` dentro del `sh -c` para que cada error quede junto a su sentencia.
+- **Automática:** `test/pytest/integridad/test_solo_agregado_sql.py` ejecuta **las mismas sentencias** de ese archivo sobre la base de test migrada y sembrada, y verifica los códigos `23001` y `23503`; así la evidencia manual y la de la suite no pueden divergir.
+- **Límites aceptados:** `TRUNCATE` (que usa `seed.py`) y un superusuario con `session_replication_role = replica` esquivan el disparador por fila (SU-16).
+
 ## Endpoints
 
 > **Desde EJ-5 (T-11)** `main.py` monta dos grupos: abierto (`/health/*`, `/auth/*`) y protegido (el resto), con el control de cambio de contraseña pendiente montado una sola vez sobre el grupo protegido. Las rutas de datos exigen sesión y el rol de la matriz RBAC (`knowledge-base/03_actores_y_roles.md`).
