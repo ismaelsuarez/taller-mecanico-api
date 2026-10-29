@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.unit_of_work import UnitOfWork
 from app.modules.clientes.repository import ClienteRepository, VehiculoRepository
+from app.modules.ordenes.repository import OrdenRepository
 
 
 class UnitOfWorkCliente(UnitOfWork):
@@ -16,3 +17,5 @@ class UnitOfWorkCliente(UnitOfWork):
         super().__init__(sesion)
         self.clientes = ClienteRepository(sesion)
         self.vehiculos = VehiculoRepository(sesion)
+        # Sólo para saber si un vehículo tiene órdenes abiertas (RN-16).
+        self.ordenes = OrdenRepository(sesion)

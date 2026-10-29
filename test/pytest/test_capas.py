@@ -81,19 +81,7 @@ def test_ningun_servicio_construye_su_unit_of_work(modulo):
     assert construidos == []
 
 
-@pytest.mark.parametrize(
-    "nombre",
-    [
-        pytest.param(
-            "service.py",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="ordenes/service.py::_es_dueno_del_vehiculo ejecuta SQL hasta la tarea 3.2",
-            ),
-        ),
-        "router.py",
-    ],
-)
+@pytest.mark.parametrize("nombre", ["service.py", "router.py"])
 def test_servicios_y_routers_no_ejecutan_sql(nombre):
     """RT-TX-05: toda consulta vive en un repositorio (ni `execute` ni `select(...)` aquí)."""
     ofensores = []

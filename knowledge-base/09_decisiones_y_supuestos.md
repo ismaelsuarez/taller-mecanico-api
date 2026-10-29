@@ -283,6 +283,16 @@ Todos con `extra="forbid"`; ningún 401/403 expone texto interno (DD-25). `POST 
 La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por rol. `/mis-*` sólo reciben sesión (RN-17). El coste aceptado de una consulta extra por petición es lo que hace que revocar surta efecto de inmediato (C-07).
 **Estado de implementación**: `requiere_rol` y `get_roles_vigentes` implementados y probados en el Grupo 2 de EJ-5; la protección de las rutas existentes llega en el Grupo 3.
 
+### DD-51 — Jerarquía de repositorios, Unit of Work y consultas de órdenes (EJ-6, D3/D4)
+**Decisión del equipo / detalle complementario (D-4)**, de [D3 y D4](../openspec/changes/06-repositorios-uow-ordenes/design.md#d3--repositorios-del-módulo-ordenes-y-reubicación-de-consultas):
+
+1. **Rollback en el UoW base**: `UnitOfWork.__aexit__` revierte y propaga si el cuerpo lanza **o si el propio `commit()` falla**; nunca cierra la sesión (B-3). Los `__aexit__` duplicados de `UnitOfWorkUsuario` y `UnitOfWorkIntentoAcceso` se eliminan: el comportamiento es el mismo y ahora lo heredan `clientes`, `repuestos` y `ordenes`.
+2. **Una clase por entidad en `ordenes`**: `OrdenRepository`, `ItemOrdenRepository` (hereda de `BaseRepository`; los ítems sólo se agregan dentro del alta de su orden), `HistorialEstadoOrdenRepository` (sólo `add`, sin `update`/`delete`, RN-15) y `EstadoOrdenRepository` (catálogo de sólo lectura, **no** hereda de `BaseRepository`, A-5).
+3. **Las consultas sobre `orden_trabajo` viven en `OrdenRepository`**: `es_dueno_del_vehiculo` (reemplaza a `_es_dueno_del_vehiculo` del servicio, sigue valiendo con el vehículo dado de baja, DD-28) y `tiene_abiertas_del_vehiculo` (reemplaza a `VehiculoRepository.tiene_ordenes_abiertas`; abierta = estado que el catálogo no marca `es_final`). `UnitOfWorkCliente` compone `ordenes` con la misma sesión para la baja de vehículos (RN-16, C-19 sin cambio de contrato) y `es_personal_o_dueno` conserva su firma (T-8).
+4. **Detalle con precarga declarada**: `OrdenRepository.get_detalle_con_items_e_historial` trae vehículo→cliente, ítems→repuesto (también dado de baja, DD-21) e historial con `populate_existing`, de modo que dentro del mismo bloque refleja los ítems y las líneas recién agregadas. El orden cronológico del historial `(cuando, id)` lo aplica quien serializa, no el repositorio.
+5. **Verificación de capas por AST** (`test/pytest/test_capas.py`): único `commit(` en el UoW base, ningún `service.py` construye su UoW, ningún `service.py`/`router.py` de los cuatro módulos con datos ejecuta SQL. `app/modules/health/router.py` (`SELECT 1` de la sonda de preparación) queda fuera porque no es un módulo con datos.
+**Estado de implementación**: puntos 1–4 implementados y probados en los Grupos 2–3 de EJ-6; el catálogo `EstadoOrdenRepository` sólo tiene el constructor (sus lecturas llegan en el Grupo 4).
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

@@ -40,24 +40,8 @@ async def es_personal_o_dueno(
 ) -> bool:
     """T-8/SU-03: el personal ve cualquier orden; el dueño sólo las suyas.
 
-    EJ-6 lo conecta al 403 de `GET /ordenes/{id}` y de cancelar, sin reescribirlo.
+    La consulta del dueño vive en `OrdenRepository.es_dueno_del_vehiculo` (EJ-6, D3).
     """
     if set(ROLES_DE_PERSONAL) & set(identidad.roles_vigentes):
         return True
-    return await _es_dueno_del_vehiculo(uow, identidad.usuario.id, orden.vehiculo_id)
-
-
-async def _es_dueno_del_vehiculo(
-    uow: UnitOfWorkOrden, usuario_id: int, vehiculo_id: int,
-) -> bool:
-    """¿El usuario es el cliente dueño de ese vehículo? (sin ficha → False)."""
-    from sqlalchemy import select
-
-    from app.modules.clientes.models import Cliente, Vehiculo
-
-    resultado = await uow.ordenes.sesion.execute(
-        select(Cliente.id)
-        .join(Vehiculo, Vehiculo.cliente_id == Cliente.id)
-        .where(Vehiculo.id == vehiculo_id, Cliente.usuario_id == usuario_id)
-    )
-    return resultado.scalar_one_or_none() is not None
+    return await uow.ordenes.es_dueno_del_vehiculo(identidad.usuario.id, orden.vehiculo_id)

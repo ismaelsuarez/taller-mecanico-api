@@ -73,7 +73,7 @@ async def borrar_vehiculo(uow: UnitOfWorkCliente, vehiculo_id: int) -> None:
         vehiculo = await uow.vehiculos.get_by_id(vehiculo_id)
         if vehiculo is None:
             raise NoEncontrado("Vehículo no encontrado.")
-        if await uow.vehiculos.tiene_ordenes_abiertas(vehiculo_id):
+        if await uow.ordenes.tiene_abiertas_del_vehiculo(vehiculo_id):
             raise EnConflicto(
                 "El vehículo tiene órdenes de trabajo abiertas y no se puede dar de baja."
             )

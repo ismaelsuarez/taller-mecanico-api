@@ -20,10 +20,10 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 3. Repositorios del módulo órdenes y reubicación de consultas
 
-- [ ] 3.1 RED/GREEN: `OrdenRepository.es_dueno_del_vehiculo` y `tiene_abiertas_del_vehiculo` (dueño también con vehículo dado de baja; abierta según `es_final`), con triangulación de dueño/ajeno/sin ficha y de estados finales/no finales.
-- [ ] 3.2 Hacer que `es_personal_o_dueno` use el repositorio (misma firma, T-8) y que `UnitOfWorkCliente` componga `ordenes` para la baja de vehículos; eliminar `VehiculoRepository.tiene_ordenes_abiertas`; verificar que la prueba de capas del 2.2 pasa a verde y que `test_clientes_vehiculos.py` (RN-16, C-19) sigue en verde sin cambiar contratos.
-- [ ] 3.3 RED/GREEN: `ItemOrdenRepository` (hereda de `BaseRepository`), `HistorialEstadoOrdenRepository` (sólo `add`, sin `update`/`delete`) y `OrdenRepository.get_detalle_con_items_e_historial` con precarga declarada (vehículo→cliente, ítems→repuesto incluido dado de baja, historial); probar que el detalle se lee sin carga perezosa y refleja ítems recién agregados en el mismo bloque.
-- [ ] 3.4 `UnitOfWorkOrden` compone `ordenes`, `items`, `historial`, `estados`, `vehiculos` y `repuestos` con la misma sesión; verificar con un test que todos comparten la sesión del UoW.
+- [x] 3.1 RED/GREEN: `OrdenRepository.es_dueno_del_vehiculo` y `tiene_abiertas_del_vehiculo` (dueño también con vehículo dado de baja; abierta según `es_final`), con triangulación de dueño/ajeno/sin ficha y de estados finales/no finales.
+- [x] 3.2 Hacer que `es_personal_o_dueno` use el repositorio (misma firma, T-8) y que `UnitOfWorkCliente` componga `ordenes` para la baja de vehículos; eliminar `VehiculoRepository.tiene_ordenes_abiertas`; verificar que la prueba de capas del 2.2 pasa a verde y que `test_clientes_vehiculos.py` (RN-16, C-19) sigue en verde sin cambiar contratos.
+- [x] 3.3 RED/GREEN: `ItemOrdenRepository` (hereda de `BaseRepository`), `HistorialEstadoOrdenRepository` (sólo `add`, sin `update`/`delete`) y `OrdenRepository.get_detalle_con_items_e_historial` con precarga declarada (vehículo→cliente, ítems→repuesto incluido dado de baja, historial); probar que el detalle se lee sin carga perezosa y refleja ítems recién agregados en el mismo bloque.
+- [x] 3.4 `UnitOfWorkOrden` compone `ordenes`, `items`, `historial`, `estados`, `vehiculos` y `repuestos` con la misma sesión; verificar con un test que todos comparten la sesión del UoW.
 
 ## 4. Catálogo de estados (sólo lectura) y `GET /estados-orden`
 
