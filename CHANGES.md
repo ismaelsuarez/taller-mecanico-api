@@ -265,7 +265,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 5 — Arquitectura transaccional y órdenes
 
 ### [EJ-6] `06-repositorios-uow-ordenes`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado y archivado (2026-10-29; 1010 tests + 2 fallos ambientales conocidos de Windows/loopback; verificación independiente APROBADA 12/12; C-06 completo, C-10, C-11, C-12 sin aviso, C-13, C-17)
 - **Ejercicio / puntos**: Ejercicio 6 — 20 pts (20 %, el de mayor peso)
 - **Scope**:
   - **Completar y auditar** la jerarquía de repositorios (T-2): `BaseRepository[T]` y `SoftDeleteRepository[T]` con todo lo exigido (`get_by_id_including_deleted`, `soft_delete`, `flush` y nunca `commit`); un repositorio por entidad con métodos nombrados por lo que traen (p. ej. `get_detalle_con_items_e_historial`) y precarga declarada **dentro** del método; `EstadoOrdenRepository` de **sólo lectura** que **no** hereda de `BaseRepository`.
