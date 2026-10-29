@@ -40,8 +40,8 @@ Plan de ejecución de `/opsx:apply 07-integridad`. Las casillas se marcan sólo 
 
 ## 5. RN-20 y `evento_seguridad` auditados
 
-- [ ] 5.1 Red de seguridad y auditoría RN-20: correr `test/pytest/test_atomicidad_bloques.py` y `test/pytest/test_repuestos.py` y anotar que la falla inyectada al escribir el historial no deja el precio nuevo (D8). Verificación: resultados del run en el documento ODD.
-- [ ] 5.2 `test/repuestos.http`: bloque «C-18 / RN-20: PATCH con el mismo precio» (200, precio igual) y lectura de `/repuestos/1/precios` sin línea nueva, con respuestas esperadas comentadas. Verificación: correr el archivo tras `python seed.py`.
+- [x] 5.1 Red de seguridad y auditoría RN-20: correr `test/pytest/test_atomicidad_bloques.py` y `test/pytest/test_repuestos.py` y anotar que la falla inyectada al escribir el historial no deja el precio nuevo (D8). Verificación: resultados del run en el documento ODD.
+- [x] 5.2 `test/repuestos.http`: bloque «C-18 / RN-20: PATCH con el mismo precio» (200, precio igual) y lectura de `/repuestos/1/precios` sin línea nueva, con respuestas esperadas comentadas. Verificación: correr el archivo tras `python seed.py`.
 - [ ] 5.3 Auditoría DD-26 (D7): verificar las siete acciones y sus actores contra el código y el seed (registrar archivo:línea en el documento ODD); si aparece una diferencia que no sea la «Y», corregirla con su prueba RED/GREEN. KB (D-4): SU de la «Y» = id del usuario; actualización de DD-53 (EJ-7 reafirma que no hay traductor global, D6); conciliar RT-SE-10 (`05_reglas_de_negocio.md`) y `04_modelo_de_datos.md` (evento_seguridad) con el evento del 429 de DD-26. Verificación: lectura de vuelta de la KB; commit del grupo.
 
 ## 6. Verificación integrada y Definition of Done
