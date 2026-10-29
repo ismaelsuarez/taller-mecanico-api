@@ -52,10 +52,10 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 8. Terminar orden (RN-13): stock, movimientos, estado e historial en un bloque
 
-- [ ] 8.1 RED/GREEN permiso (`requiere_rol("MECANICO","ADMIN")` + asignación en el servicio): mecánico no asignado, recepción y cliente → 403 sin escrituras; mecánico asignado que perdió el rol MECANICO → 403; 404 inexistente; 409 desde `PENDIENTE`/`TERMINADA`/`CANCELADA` sin escrituras.
-- [ ] 8.2 RED/GREEN C-11: terminar la orden 2 del seed (4 bujías, stock 2) → 409 con mensaje humano; estado, stock, cantidad de movimientos e historial idénticos antes y después. Triangular con una orden de varios ítems donde sólo el último no alcanza (ningún stock cambia).
-- [ ] 8.3 RED/GREEN C-12 sin aviso: reponer 2 bujías y terminar con el mecánico asignado → 200 `TERMINADA`, stock 0, movimiento −4 «Salida por orden de trabajo #2» con `orden_id` y su `usuario_id`, línea `EN_REPARACION → TERMINADA`; triangular con un ADMIN que termina (no cambia `mecanico_id`, DD-31) y con un repuesto dado de baja tras el alta (DD-21). Probar con falla inyectada a mitad de la terminación que no queda ninguna escritura (RN-13, RT-TX-04).
-- [ ] 8.4 Agregar a `test/ordenes.http` C-11 (409 + lecturas que muestran nada cambió), C-12 sin aviso (reponer, terminar, movimientos, historial) y el resto de C-13 (recepción cancela la orden terminada → 409); registrar en la KB (D-4) la guarda de stock y el tope del total (DD) y el supuesto del rol MECANICO vigente para el asignado (SU).
+- [x] 8.1 RED/GREEN permiso (`requiere_rol("MECANICO","ADMIN")` + asignación en el servicio): mecánico no asignado, recepción y cliente → 403 sin escrituras; mecánico asignado que perdió el rol MECANICO → 403; 404 inexistente; 409 desde `PENDIENTE`/`TERMINADA`/`CANCELADA` sin escrituras.
+- [x] 8.2 RED/GREEN C-11: terminar la orden 2 del seed (4 bujías, stock 2) → 409 con mensaje humano; estado, stock, cantidad de movimientos e historial idénticos antes y después. Triangular con una orden de varios ítems donde sólo el último no alcanza (ningún stock cambia).
+- [x] 8.3 RED/GREEN C-12 sin aviso: reponer 2 bujías y terminar con el mecánico asignado → 200 `TERMINADA`, stock 0, movimiento −4 «Salida por orden de trabajo #2» con `orden_id` y su `usuario_id`, línea `EN_REPARACION → TERMINADA`; triangular con un ADMIN que termina (no cambia `mecanico_id`, DD-31) y con un repuesto dado de baja tras el alta (DD-21). Probar con falla inyectada a mitad de la terminación que no queda ninguna escritura (RN-13, RT-TX-04).
+- [x] 8.4 Agregar a `test/ordenes.http` C-11 (409 + lecturas que muestran nada cambió), C-12 sin aviso (reponer, terminar, movimientos, historial) y el resto de C-13 (recepción cancela la orden terminada → 409); registrar en la KB (D-4) la guarda de stock y el tope del total (DD) y el supuesto del rol MECANICO vigente para el asignado (SU).
 
 ## 9. Verificación integrada y Definition of Done
 

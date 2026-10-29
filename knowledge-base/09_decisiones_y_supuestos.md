@@ -305,6 +305,7 @@ La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por 
 
 ### DD-53 — Guarda de stock en el punto único y tope del total de la orden (EJ-6, D5/D6)
 **Decisión**: `RepuestoRepository.registrar_movimiento` valida `stock + cantidad >= 0` **antes** de agregar el movimiento o tocar el stock y, si no alcanza, lanza `StockInsuficiente(EnConflicto)` → 409 con el mensaje «No hay stock suficiente de {descripción} ({código}): hay {n} y se necesitan {m}.». La guarda vive ahí (y no sólo en el servicio de órdenes) para que ningún llamador futuro deje stock negativo; el `CHECK stock >= 0` de la base queda como última defensa. Además, el alta de una orden rechaza con 409 «El total de la orden supera el máximo permitido: revisá las cantidades.» un total mayor a 9 999 999 999.99 (tope de `NUMERIC(12,2)`), nunca un 500. Extiende DD-41 (tope de existencias).
+**Estado de implementación**: la guarda del punto único alimenta `POST /ordenes/{id}/terminar` (Grupo 8 de EJ-6): la primera insuficiencia aborta el bloque y el Unit of Work revierte los movimientos y stocks ya escritos (C-11); el tope del total se aplica en el alta (Grupo 6).
 **Origen**: RN-13, RN-14, S-5, S-9. **Riesgo**: bajo.
 
 ### DD-54 — Orden de controles de las transiciones y predicado `puede_cancelar` (EJ-6, D2/D7)
@@ -365,3 +366,7 @@ Resuelto por DD-30.
 
 ### SU-14 — `POST /repuestos` con `stock_inicial = 0` no genera movimiento
 Confirmado por DD-23.
+
+### SU-15 — El mecánico asignado necesita el rol MECANICO vigente para terminar
+**Supuesto** (EJ-6, D2): `POST /ordenes/{id}/terminar` exige `requiere_rol("MECANICO","ADMIN")` en la ruta y, en el servicio, ADMIN vigente **o** `mecanico_id == usuario` con el rol MECANICO vigente. Un mecánico que fue asignado y después perdió el rol MECANICO (y no es ADMIN) recibe 403 (RN-04: los permisos salen de los roles vigentes, en cada petición). El rol de ruta precede a la existencia de la orden: RECEPCION y CLIENTE reciben 403 aun con un id inexistente (la consigna lista 403 y 404 para la ruta y RN-12 fija «permiso antes que estado»).
+**Origen**: RN-04, RN-13, DD-31, DD-54. **Riesgo**: bajo. Probado en `test/pytest/ordenes/test_terminar_orden_http.py`.

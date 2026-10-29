@@ -26,6 +26,7 @@ from app.modules.usuarios.schemas import IdentidadLectura
 
 ROLES_DE_PERSONAL = ("ADMIN", "RECEPCION", "MECANICO")  # SU-03
 ROLES_QUE_CANCELAN = ("ADMIN", "RECEPCION")  # RN-12: MECANICO es personal pero no cancela
+MOTIVO_SALIDA_POR_ORDEN = "Salida por orden de trabajo #{orden_id}"  # RN-13, texto de C-12
 # Tope de la columna `orden_trabajo.total`, NUMERIC(12,2): 9 999 999 999.99.
 TOTAL_MAXIMO = Decimal("9999999999.99")
 
@@ -198,7 +199,7 @@ async def crear_orden(
         return armar_detalle(completa)
 
 
-# --- Transiciones (D7): iniciar y cancelar. Terminar llega con su propia tabla de escrituras. ---
+# --- Transiciones (D7): iniciar, cancelar y terminar ---
 
 # Cómo se nombra cada estado en un 409 («La orden ya está terminada: no se puede cancelar.»).
 _ESTADO_EN_PALABRAS = {
@@ -221,23 +222,23 @@ async def puede_cancelar(
     return await uow.ordenes.es_dueno_del_vehiculo(identidad.usuario.id, orden.vehiculo_id)
 
 
-async def _transicionar(
+def _exigir_estado(orden: OrdenTrabajo, desde: EstadoOrdenCodigo, verbo: str) -> None:
+    """409 si la orden no está en el estado de origen; se evalúa antes de la primera escritura (RN-11)."""
+    if orden.estado != desde.value:
+        raise EnConflicto(
+            f"La orden {_ESTADO_EN_PALABRAS[orden.estado]}: no se puede {verbo}."
+        )
+
+
+async def _registrar_transicion(
     uow: UnitOfWorkOrden,
     orden: OrdenTrabajo,
     desde: EstadoOrdenCodigo,
     hasta: EstadoOrdenCodigo,
     usuario_id: int,
-    verbo: str,
     mecanico_id: int | None = None,
 ) -> OrdenDetalle:
-    """Cambia el estado, firma el historial y relee el detalle, todo dentro del bloque abierto.
-
-    El estado se valida antes de la primera escritura: un 409 no deja nada escrito (RN-11).
-    """
-    if orden.estado != desde.value:
-        raise EnConflicto(
-            f"La orden {_ESTADO_EN_PALABRAS[orden.estado]}: no se puede {verbo}."
-        )
+    """Cambia el estado, firma el historial y relee el detalle, todo dentro del bloque abierto."""
     orden.estado = hasta.value
     if mecanico_id is not None:
         orden.mecanico_id = mecanico_id
@@ -258,9 +259,10 @@ async def iniciar_orden(
     """
     async with uow:
         orden = await _orden_o_404(uow, orden_id)
-        return await _transicionar(
+        _exigir_estado(orden, EstadoOrdenCodigo.PENDIENTE, "iniciar")
+        return await _registrar_transicion(
             uow, orden, EstadoOrdenCodigo.PENDIENTE, EstadoOrdenCodigo.EN_REPARACION,
-            identidad.usuario.id, "iniciar", mecanico_id=identidad.usuario.id,
+            identidad.usuario.id, mecanico_id=identidad.usuario.id,
         )
 
 
@@ -272,7 +274,49 @@ async def cancelar_orden(
         orden = await _orden_o_404(uow, orden_id)
         if not await puede_cancelar(uow, identidad, orden):
             raise NoAutorizado("No tenés permiso para cancelar esta orden.")
-        return await _transicionar(
+        _exigir_estado(orden, EstadoOrdenCodigo.PENDIENTE, "cancelar")
+        return await _registrar_transicion(
             uow, orden, EstadoOrdenCodigo.PENDIENTE, EstadoOrdenCodigo.CANCELADA,
-            identidad.usuario.id, "cancelar",
+            identidad.usuario.id,
+        )
+
+
+async def puede_terminar(
+    uow: UnitOfWorkOrden, identidad: IdentidadLectura, orden: OrdenTrabajo,
+) -> bool:
+    """RN-13 (D2): un ADMIN vigente, o el mecánico asignado a la orden con el rol MECANICO vigente.
+
+    Otro mecánico, la recepción y los clientes no terminan. Que el asignado haya perdido el rol
+    MECANICO es un supuesto documentado (SU-15): sus permisos salen de los roles vigentes (RN-04).
+    """
+    roles = set(identidad.roles_vigentes)
+    if "ADMIN" in roles:
+        return True
+    return "MECANICO" in roles and orden.mecanico_id == identidad.usuario.id
+
+
+async def terminar_orden(
+    uow: UnitOfWorkOrden, identidad: IdentidadLectura, orden_id: int,
+) -> OrdenDetalle:
+    """`EN_REPARACION → TERMINADA` descontando el stock, todo o nada (RN-13, RT-TX-04).
+
+    Orden de los controles: 404 → permiso (403) → estado (409) → stock (409). Las cuatro
+    escrituras (stock, movimientos, estado, historial) ocurren en este único bloque: la primera
+    insuficiencia o cualquier falla las revierte todas al salir del `async with`. El stock sólo se
+    toca por el punto único `registrar_movimiento` (B-7); `mecanico_id` no cambia (DD-31).
+    """
+    async with uow:
+        orden = await _orden_o_404(uow, orden_id)
+        if not await puede_terminar(uow, identidad, orden):
+            raise NoAutorizado("No tenés permiso para terminar esta orden.")
+        _exigir_estado(orden, EstadoOrdenCodigo.EN_REPARACION, "terminar")
+        motivo = MOTIVO_SALIDA_POR_ORDEN.format(orden_id=orden.id)
+        # El repuesto sale de la relación precargada del ítem: incluye los dados de baja (DD-21).
+        for item in sorted(orden.items, key=lambda i: i.id):
+            await uow.repuestos.registrar_movimiento(
+                item.repuesto, -item.cantidad, motivo, identidad.usuario.id, orden_id=orden.id,
+            )
+        return await _registrar_transicion(
+            uow, orden, EstadoOrdenCodigo.EN_REPARACION, EstadoOrdenCodigo.TERMINADA,
+            identidad.usuario.id,
         )

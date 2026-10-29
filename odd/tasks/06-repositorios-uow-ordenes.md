@@ -44,7 +44,9 @@ Reglas duras de `CLAUDE.md` (A-*, B-*, S-*, D-*, E-*); Strict TDD (RED → GREEN
   - 7.1/7.2: `test_transiciones_http.py` (47 casos con parametrización: `TestIniciar`, `TestCancelar`, `TestRutasPublicadas`; helpers compartidos en `ordenes/_apoyo.py`). RED: 47 fallos, todos 404 por ruta ausente (o `DID NOT RAISE` en las fallas inyectadas) → GREEN `iniciar_orden`/`cancelar_orden`/`puede_cancelar`/`_transicionar` en `service.py` + dos rutas en `router.py` (`iniciar` con `requiere_rol("MECANICO")`; `cancelar` sin rol de ruta). Triangulado: iniciar por dos mecánicos y órdenes distintas, ADMIN con rol MECANICO agregado, 409 desde 3 estados con mensaje que nombra el estado, doble iniciar, 404 ×3 ids (999, 0, 2^31), 422, 403 ×3 roles + 403 por rol de ruta antes del 404, cambio pendiente, rol revocado en caliente, 401; cancelar por dueño/recepción/admin (3 firmas distintas), dueño con vehículo de baja (DD-28), orden de la API sin tocar stock, 403 (no 409) para cliente ajeno en orden pendiente y no pendiente, MECANICO asignado y no asignado → 403, MECANICO con rol RECEPCION vigente → 200, RECEPCION revocada → 403, 409 con permiso desde 3 estados, dueño sobre su terminada → 409, 404 antes que 403 (2 usuarios × 3 ids), 401, cambio pendiente. Fallas inyectadas (historial.add) en iniciar y cancelar: estado, mecanico_id e historial intactos (todo en un bloque).
   - 7.3: bloques de `test/ordenes.http` (iniciar 200/409/403; C-13: 403 ajena, 403 mecánico, 200 del dueño, 401) y DD-54 en la KB (orden de controles, `puede_cancelar`, mensajes).
   - Sensibilidad: el 403-antes-que-409 de cancelar y el mensaje propio de cancelar (que distingue servicio de `requiere_rol`) están fijados por asserts exactos.
-- T8 [ ] — Grupo 8: terminar orden RN-13 (en curso).
+- T8 [done] — Grupo 8: terminar orden RN-13 (8.1-8.4). Ruta: inline (servicio + router + un archivo de pruebas; D5/D7 ya mapeaban el terreno). Riesgo ALTO (stock, dinero y transacción multiescritura): commit propio. Commit: ver L14.
+  - 8.1-8.3: `test_terminar_orden_http.py` (36 casos con parametrización). RED: 36 fallos por ruta ausente (404 en lugar de 200/401/403/409/422; `DID NOT RAISE` en las fallas inyectadas; `KeyError` en OpenAPI) y un caso que pasaba trivialmente (el mensaje sin nombres internos contra un 404): se reforzó con `assert 409`. GREEN: `puede_terminar`, `terminar_orden` y la ruta `POST /ordenes/{id}/terminar` con `requiere_rol("MECANICO","ADMIN")`; REFACTOR: `_transicionar` se partió en `_exigir_estado` + `_registrar_transicion` (tests de iniciar/cancelar en verde) para que el estado se valide antes de las salidas de stock. Cobertura: C-11 exacto (mensaje + snapshot idéntico de estado/stock/movimientos/historial), falta en el último y en el primer ítem de una orden de varios, C-12 exacto (stock 0, movimiento −4 «Salida por orden de trabajo #2» con `orden_id` y `usuario_id` 4, línea `EN_REPARACION → TERMINADA`), orden de tres ítems (un movimiento por ítem, salida exacta → 0), ADMIN que termina (no reasigna, DD-31; firma con su usuario) y ADMIN asignado, repuesto dado de baja (DD-21), terminar dos veces descuenta una vez, permisos (mecánico ajeno, recepción, cliente, asignado sin rol MECANICO, cambio pendiente, 401, 404 ×3 ids, 403 de rol antes que 404 para recepción, 422), 409 por estado ×4 combinaciones, 403 antes que 409. Fallas inyectadas: en `historial.add`, en la segunda salida de stock y en `ordenes.update` → ningún cambio en estado, stock, movimientos ni historial, más el control sin falla que confirma las cuatro escrituras.
+  - 8.4: bloques C-11 (409 + tres lecturas que muestran que nada cambió), C-12 sin aviso (reponer, terminar, stock, movimientos, doble terminación), terminar por mecánico ajeno (403) y C-13 restante (recepción sobre la terminada → 409) en `test/ordenes.http`; SU-15 (rol MECANICO vigente del asignado y 403 de rol antes que 404) y estado de implementación de DD-53 en la KB `09`; README con la ruta `terminar` y los casos manuales.
 - T9 [ ] — Grupo 9: verificación integrada y DoD (pendiente).
 
 Pronóstico de líneas autorales (adiciones + eliminaciones, sin generados): G1 ~60 · G2 ~260 · G3 ~380 · G4 ~220 · G5 ~120 · G6 ~520 · G7 ~300 · G8 ~380 · G9 ~120 → ~2 360 en total. Supera ~400, por lo que la entrega se parte en slices por grupo (estrategia `ask-on-risk`, a decidir con el usuario al preparar el PR; no se pushea en este tramo).
@@ -59,9 +61,11 @@ C-06 completo, C-10, C-11, C-12 (sin aviso), C-13, C-17 en `test/ordenes.http`; 
 
 ## Progreso
 
-Tramo actual: README (4.3, 6.5) y grupos 7-8 (ver Log L11 en adelante). Progreso OpenSpec: 23/31 tareas.
+Tramo actual: README (4.3, 6.5) y grupos 7-8 (ver Log L11 en adelante). Progreso OpenSpec: 27/31 tareas.
 
 ## Evidencia de verificación
+
+- Cierre del grupo 8: suite completa **1010 passed + los 2 failed ambientales conocidos** (mismos nombres que el baseline: `test_salud.py::test_el_503_registra_la_causa_en_el_log_sin_secretos` y `test_fixtures_migradas.py::test_migrar_preserva_el_diagnostico_503_en_la_captura_actual`), 0 skipped, 8:48 min; +83 pruebas respecto de 927 (G7 47, G8 36), cero regresiones.
 
 - Cierre del grupo 6: suite completa **927 passed + los 2 failed ambientales conocidos** (mismos nombres que el baseline), 0 skipped, 6:19 min; +165 pruebas respecto de 762 (G4 36, G5 12, G6 117), cero regresiones.
 
@@ -70,7 +74,7 @@ Tramo actual: README (4.3, 6.5) y grupos 7-8 (ver Log L11 en adelante). Progreso
 
 ## Siguiente paso
 
-Grupo 8 (terminar la orden, RN-13).
+Grupo 9 (verificación integrada y Definition of Done).
 
 ## Log
 
@@ -86,3 +90,5 @@ Grupo 8 (terminar la orden, RN-13).
 - L10: Grupo 6 commiteado como `8bc5b62` y cerrado; registrados DD-52 y DD-53 en la KB `09` (D-4). Decisión nueva: un `orden_id` fuera de `1..2 147 483 647` responde 404 (no 422/500). Observación: `GET /repuestos/{id}` con un id mayor a INTEGER no está acotado en el módulo repuestos (fuera del alcance de este tramo; no se probó ni se tocó).
 - L11: Bloqueo del README resuelto (superficie ampliada por el usuario): sección «Órdenes de trabajo y catálogo de estados (EJ-6)» en `README.md` (rutas, permisos, códigos, uso de `test/ordenes.http`), cuatro filas nuevas en la matriz RBAC y corrección de la frase obsoleta sobre `es_personal_o_dueno`. Tareas 4.3 y 6.5 marcadas; progreso 20/31. Doc-only: sin RED/GREEN (comprobado contra el código y las pruebas existentes de los grupos 4 y 6).
 - L12: Grupo 7 verificado: `test_transiciones_http.py` + `test_capas.py` 55 passed; regresión `ordenes/` + `test_capas.py` + `autorizacion/` **357 passed**, 0 failed (4:00 min). Decisión: `puede_cancelar` (RECEPCION/ADMIN vigentes o dueño) es un predicado distinto de `es_personal_o_dueno`; `cancelar` evalúa 404 → permiso → estado, `iniciar` deja el rol a la ruta (DD-54). Los helpers de snapshot (`instantanea`, `poner_estado`, `crear_orden`) viven en `test/pytest/ordenes/_apoyo.py` para que los grupos 7 y 8 no los dupliquen.
+- L13: Grupo 7 commiteado como `15db822` (iniciar/cancelar, DD-54, bloques `.http`, README).
+- L14: Grupo 8 cerrado (commit en L15). Decisiones: la guarda de stock se apoya en `registrar_movimiento` (DD-53) y el recorrido de ítems es por id; el estado se valida antes de la primera salida; permiso `puede_terminar` = ADMIN vigente o (MECANICO vigente y asignado) (SU-15). Sin cambios de esquema, `seed.py` ni migraciones.

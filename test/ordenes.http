@@ -235,6 +235,83 @@ Cookie: {{loginMecanico.response.headers.Set-Cookie}}
 POST {{baseUrl}}/ordenes/1/iniciar
 Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
+### C-11: terminar la orden 2 sin bujías suficientes (pide 4, el stock es 2)
+# Sólo el mecánico asignado (usuario 4) o un ADMIN terminan. Es todo o nada: si algún ítem no alcanza,
+# no se descuenta nada, no se crea ningún movimiento y la orden sigue EN_REPARACION.
+# Esperado: 409 Conflict
+# {"detail": "No hay stock suficiente de Bujía de encendido (BUJ-014): hay 2 y se necesitan 4."}
+POST {{baseUrl}}/ordenes/2/terminar
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### C-11: la orden 2 sigue EN_REPARACION y su historial no cambió
+# Esperado: 200 OK — "estado": "EN_REPARACION", "mecanico_id": 4 y sólo las dos líneas de historial del seed
+# (null → PENDIENTE, PENDIENTE → EN_REPARACION)
+GET {{baseUrl}}/ordenes/2
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-11: el stock de la bujía sigue en 2
+# Esperado: 200 OK
+# {"id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido", "precio": "6500.00", "stock": 2}
+GET {{baseUrl}}/repuestos/3
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-11: no apareció ningún movimiento de salida
+# Esperado: 200 OK — un único movimiento: el «Stock inicial» de +2 del seed
+# [{"id": 3, "repuesto_id": 3, "orden_id": null, "usuario_id": 1, "cantidad": 2, "motivo": "Stock inicial", "cuando": "<fecha>"}]
+GET {{baseUrl}}/repuestos/3/movimientos
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-12 (sin aviso): el administrador repone 2 bujías
+# Esperado: 200 OK
+# {"id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido", "precio": "6500.00", "stock": 4}
+POST {{baseUrl}}/repuestos/3/reponer
+Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+{"cantidad": 2}
+
+### C-12 (sin aviso): ahora el mecánico asignado termina la orden 2
+# En un solo bloque: movimiento de −4, stock a 0, estado TERMINADA y línea de historial firmada por
+# el mecánico (usuario 4). `mecanico_id` no cambia. (El aviso en segundo plano llega en EJ-8.)
+# Esperado: 200 OK
+# {"id": 2, "estado": "TERMINADA", "patente": "ZZ999YY", "total": "26000.00",
+#  "creada_en": "<fecha>", "mecanico_id": 4, "falla": "Falla de encendido", "cliente": "Jorge Sin Cuenta",
+#  "items": [{"repuesto_id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido",
+#    "cantidad": 4, "precio_unitario": "6500.00", "subtotal": "26000.00"}],
+#  "historial": [
+#   {"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"},
+#   {"desde_estado": "PENDIENTE", "hasta_estado": "EN_REPARACION", "usuario_id": 4, "cuando": "<fecha>"},
+#   {"desde_estado": "EN_REPARACION", "hasta_estado": "TERMINADA", "usuario_id": 4, "cuando": "<fecha>"}]}
+POST {{baseUrl}}/ordenes/2/terminar
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### C-12 (sin aviso): el stock de la bujía quedó en 0
+# Esperado: 200 OK
+# {"id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido", "precio": "6500.00", "stock": 0}
+GET {{baseUrl}}/repuestos/3
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-12 (sin aviso): el movimiento de salida quedó ligado a la orden y a quien la terminó
+# Esperado: 200 OK — los tres movimientos en orden cronológico; el último es la salida
+# [{"id": 3, "repuesto_id": 3, "orden_id": null, "usuario_id": 1, "cantidad": 2, "motivo": "Stock inicial", "cuando": "<fecha>"},
+#  {"id": 5, "repuesto_id": 3, "orden_id": null, "usuario_id": 1, "cantidad": 2, "motivo": "Reposición", "cuando": "<fecha>"},
+#  {"id": 6, "repuesto_id": 3, "orden_id": 2, "usuario_id": 4, "cantidad": -4,
+#   "motivo": "Salida por orden de trabajo #2", "cuando": "<fecha>"}]
+GET {{baseUrl}}/repuestos/3/movimientos
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-12 (sin aviso): terminar otra vez no vuelve a descontar
+# Esperado: 409 Conflict — el stock sigue en 0
+# {"detail": "La orden ya está terminada: no se puede terminar."}
+POST {{baseUrl}}/ordenes/2/terminar
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### Terminar: otro mecánico no puede terminar una orden que no tiene asignada
+# Esperado: 403 Forbidden (antes de evaluar el estado)
+# {"detail": "No tenés permiso para terminar esta orden."}
+POST {{baseUrl}}/ordenes/2/terminar
+Cookie: {{loginMecanico2.response.headers.Set-Cookie}}
+
 ### C-13: Laura no cancela la orden 2, que es de otro cliente (y no está pendiente)
 # El permiso se evalúa ANTES que el estado: 403, nunca 409.
 # Esperado: 403 Forbidden
@@ -259,6 +336,13 @@ Cookie: {{loginMecanico.response.headers.Set-Cookie}}
 #   {"desde_estado": "PENDIENTE", "hasta_estado": "CANCELADA", "usuario_id": 6, "cuando": "<fecha>"}]}
 POST {{baseUrl}}/ordenes/1/cancelar
 Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-13: la recepción no cancela una orden terminada (la 2 ya se terminó en C-12)
+# Con permiso, el estado decide: sólo se cancela desde PENDIENTE. Nada cambia.
+# Esperado: 409 Conflict
+# {"detail": "La orden ya está terminada: no se puede cancelar."}
+POST {{baseUrl}}/ordenes/2/cancelar
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
 
 ### Cancelar: sin sesión siempre 401
 # Esperado: 401 Unauthorized
