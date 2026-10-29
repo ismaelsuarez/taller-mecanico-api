@@ -107,7 +107,7 @@ Cualquier otra transición → 409.
 - **RT-SE-09** — Cada intento de login, correcto o fallido, se anota en `intento_acceso` desde **una sesión y una transacción propias, que se confirman siempre**, mediante un **UoW dedicado** (DD-19). Es la única escritura que no comparte la transacción de su petición. El código lo declara en un comentario, junto con su costo: deja filas aunque la petición falle.
 - **RT-SE-12** — La clave de firma del JWT es **fija** (`JWT_SECRET` del entorno) y nunca se genera al arrancar: si cambiara en cada reinicio, todas las sesiones se invalidarían (DD-20; consigna 5.12 + pedido del docente).
 - **RT-SE-13** — El registro deja la sesión iniciada: 201 con `Set-Cookie access_token` emitida después del commit del UoW (DD-17).
-- **RT-SE-10** — El historial de seguridad (`evento_seguridad`) registra las altas, los cambios de rol y de contraseña, y los datos iniciales con el actor `SISTEMA` (texto, no un usuario).
+- **RT-SE-10** — El historial de seguridad (`evento_seguridad`) registra las altas, los cambios de rol y de contraseña, el bloqueo por demasiados intentos de login (429; actor: el correo intentado, DD-26) y los datos iniciales con el actor `SISTEMA` (texto, no un usuario). Los logins comunes y los 401 no generan eventos (ya quedan en `intento_acceso`).
 - **RT-SE-11** — Vencimiento de un rol: debe llegar **con zona horaria** y **en el futuro**; si no, **422** (no 409).
 
 ## Dominio: Transacciones y persistencia (RT-TX)

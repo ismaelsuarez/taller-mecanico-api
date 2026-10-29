@@ -111,7 +111,7 @@ Constraints: **índice único parcial `(usuario_id, rol) WHERE revocada_en IS NU
 | `actor` | **texto** | Correo/identificador del usuario o `SISTEMA` |
 | `accion` | str | |
 
-Sin restricciones extra. Registra altas, cambios de rol, cambios de contraseña y los datos iniciales.
+Sin restricciones extra. Registra altas, cambios de rol, cambios de contraseña, el bloqueo por demasiados intentos de login (429; actor: el correo intentado, DD-26) y los datos iniciales (actor `SISTEMA`).
 
 ### cliente
 | Columna | Tipo | Notas |
