@@ -6,7 +6,7 @@ necesita (T-10, B-4): nadie depende de la carga perezosa. Ningún método confir
 la transacción (B-1): sólo `flush`.
 """
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -19,6 +19,21 @@ class OrdenRepository(BaseRepository[OrdenTrabajo]):
     def __init__(self, sesion: AsyncSession) -> None:
         super().__init__(sesion, OrdenTrabajo)
 
+    async def _pagina_de(
+        self, base: Select, page: int, size: int,
+    ) -> tuple[list[OrdenTrabajo], int]:
+        """(página, total) de una consulta ya filtrada y ordenada; el conteo usa el mismo filtro."""
+        total_resultado = await self.sesion.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total = total_resultado.scalar_one()
+        if total == 0:
+            return [], 0
+        pagina_resultado = await self.sesion.execute(
+            base.offset((page - 1) * size).limit(size)
+        )
+        return list(pagina_resultado.scalars().all()), total
+
     async def get_ordenes_de_cliente(
         self, cliente_id: int, page: int, size: int,
     ) -> tuple[list[OrdenTrabajo], int]:
@@ -30,16 +45,16 @@ class OrdenRepository(BaseRepository[OrdenTrabajo]):
             .where(Cliente.id == cliente_id)
             .order_by(OrdenTrabajo.id)
         )
-        total_resultado = await self.sesion.execute(
-            select(func.count()).select_from(base.subquery())
-        )
-        total = total_resultado.scalar_one()
-        if total == 0:
-            return [], 0
-        pagina_resultado = await self.sesion.execute(
-            base.offset((page - 1) * size).limit(size)
-        )
-        return list(pagina_resultado.scalars().all()), total
+        return await self._pagina_de(base, page, size)
+
+    async def listar(
+        self, estado: str | None, page: int, size: int,
+    ) -> tuple[list[OrdenTrabajo], int]:
+        """Todas las órdenes por id, con filtro opcional por estado; `total` con el mismo filtro."""
+        base = select(OrdenTrabajo).order_by(OrdenTrabajo.id)
+        if estado is not None:
+            base = base.where(OrdenTrabajo.estado == estado)
+        return await self._pagina_de(base, page, size)
 
     async def get_detalle_con_items_e_historial(self, orden_id: int) -> OrdenTrabajo | None:
         """Orden con vehículo→cliente, ítems→repuesto (también dado de baja, DD-21) e historial.

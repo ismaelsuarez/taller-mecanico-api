@@ -91,3 +91,121 @@ Content-Type: application/json
 Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 {"codigo":"NUEVO","descripcion":"No debería crearse","posicion":9,"es_final":false}
+
+### C-17: listado de órdenes filtrado por un estado declarado
+# Antes de crear ninguna orden: sólo la orden 1 del seed está PENDIENTE. Personal: ADMIN/RECEPCION/MECANICO.
+# Esperado: 200 OK
+# {"items": [{"id": 1, "vehiculo_id": 1, "estado": "PENDIENTE", "falla": "Cambio de aceite y filtro",
+#   "creada_en": "<fecha>", "mecanico_id": null, "total": "56500.00"}],
+#  "total": 1, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/ordenes?estado=PENDIENTE
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-17: filtro con un estado que el contrato no declara
+# Esperado: 422 Unprocessable Entity — mensaje humano, sin repetir lo enviado
+# {"detail": [{"msg": "Elegí un valor válido para el estado."}]}
+GET {{baseUrl}}/ordenes?estado=ARCHIVADA
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-17: el cliente no lista todas las órdenes
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+GET {{baseUrl}}/ordenes
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-10: alta de una orden con dos ítems (la crea la recepción)
+# Los precios se copian del repuesto y el total lo calcula el servidor; el historial queda firmado
+# por la recepción (usuario 3). El stock NO baja al crear (sólo al terminar).
+# Esperado: 201 Created
+# {"id": 3, "estado": "PENDIENTE", "patente": "AC456EF", "total": "68000.00",
+#  "creada_en": "<fecha>", "mecanico_id": null, "falla": "Ruido al frenar", "cliente": "Laura Cliente",
+#  "items": [
+#   {"repuesto_id": 2, "codigo": "FRE-010", "descripcion": "Pastillas de freno delanteras",
+#    "cantidad": 1, "precio_unitario": "32000.00", "subtotal": "32000.00"},
+#   {"repuesto_id": 4, "codigo": "ACE-530", "descripcion": "Aceite 5W30 por litro",
+#    "cantidad": 3, "precio_unitario": "12000.00", "subtotal": "36000.00"}],
+#  "historial": [{"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"}]}
+POST {{baseUrl}}/ordenes
+Content-Type: application/json
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+{"vehiculo_id": 2, "falla": "Ruido al frenar",
+ "items": [{"repuesto_id": 2, "cantidad": 1}, {"repuesto_id": 4, "cantidad": 3}]}
+
+### C-10: alta con un repuesto inexistente
+# Esperado: 409 Conflict — la orden no queda creada (el bloque siguiente lo comprueba)
+# {"detail": "Estos repuestos no existen o fueron dados de baja: 999."}
+POST {{baseUrl}}/ordenes
+Content-Type: application/json
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+{"vehiculo_id": 2, "falla": "Ruido al frenar",
+ "items": [{"repuesto_id": 2, "cantidad": 1}, {"repuesto_id": 999, "cantidad": 1}]}
+
+### C-10: la orden del 409 no existe (y la anterior sí)
+# Después del alta correcta (orden 3) hay exactamente dos PENDIENTE: la 1 del seed y la 3. No hay orden 4.
+# Esperado: 200 OK
+# {"items": [{"id": 1, "vehiculo_id": 1, "estado": "PENDIENTE", "falla": "Cambio de aceite y filtro",
+#   "creada_en": "<fecha>", "mecanico_id": null, "total": "56500.00"},
+#  {"id": 3, "vehiculo_id": 2, "estado": "PENDIENTE", "falla": "Ruido al frenar",
+#   "creada_en": "<fecha>", "mecanico_id": null, "total": "68000.00"}],
+#  "total": 2, "page": 1, "size": 20, "pages": 1}
+GET {{baseUrl}}/ordenes?estado=PENDIENTE
+Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+
+### C-10: ni el mecánico ni el cliente crean órdenes
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+POST {{baseUrl}}/ordenes
+Content-Type: application/json
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+{"vehiculo_id": 2, "falla": "Ruido al frenar", "items": [{"repuesto_id": 2, "cantidad": 1}]}
+
+### C-06: Laura ve el detalle de su orden (la 1 es del vehículo AA111BB)
+# Esperado: 200 OK
+# {"id": 1, "estado": "PENDIENTE", "patente": "AA111BB", "total": "56500.00",
+#  "creada_en": "<fecha>", "mecanico_id": null, "falla": "Cambio de aceite y filtro", "cliente": "Laura Cliente",
+#  "items": [
+#   {"repuesto_id": 1, "codigo": "FIL-001", "descripcion": "Filtro de aceite",
+#    "cantidad": 1, "precio_unitario": "8500.00", "subtotal": "8500.00"},
+#   {"repuesto_id": 4, "codigo": "ACE-530", "descripcion": "Aceite 5W30 por litro",
+#    "cantidad": 4, "precio_unitario": "12000.00", "subtotal": "48000.00"}],
+#  "historial": [{"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"}]}
+GET {{baseUrl}}/ordenes/1
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-06: Laura no ve la orden de otro cliente (la 2 es del vehículo de Jorge)
+# Esperado: 403 Forbidden — sin datos de la orden
+# {"detail": "No tenés permiso para ver esta orden."}
+GET {{baseUrl}}/ordenes/2
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-06: un mecánico ve una orden que no tiene asignada (DD-27)
+# mecanico2 no tiene órdenes asignadas: el personal ve cualquiera.
+# Esperado: 200 OK — el detalle de la orden 1 (mismo cuerpo que el bloque de Laura)
+GET {{baseUrl}}/ordenes/1
+Cookie: {{loginMecanico2.response.headers.Set-Cookie}}
+
+### C-06: el detalle de la orden 2 con su historial cronológico
+# Esperado: 200 OK
+# {"id": 2, "estado": "EN_REPARACION", "patente": "ZZ999YY", "total": "26000.00",
+#  "creada_en": "<fecha>", "mecanico_id": 4, "falla": "Falla de encendido", "cliente": "Jorge Sin Cuenta",
+#  "items": [{"repuesto_id": 3, "codigo": "BUJ-014", "descripcion": "Bujía de encendido",
+#    "cantidad": 4, "precio_unitario": "6500.00", "subtotal": "26000.00"}],
+#  "historial": [
+#   {"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"},
+#   {"desde_estado": "PENDIENTE", "hasta_estado": "EN_REPARACION", "usuario_id": 4, "cuando": "<fecha>"}]}
+GET {{baseUrl}}/ordenes/2
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-06: sin sesión siempre 401, nunca un 403 por rol
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+GET {{baseUrl}}/ordenes/1
+
+### Una orden que no existe
+# Esperado: 404 Not Found
+# {"detail": "Orden no encontrada."}
+GET {{baseUrl}}/ordenes/999
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}

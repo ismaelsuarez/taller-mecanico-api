@@ -99,6 +99,10 @@ _CAMPOS_VISIBLES = {
     "cliente_id": "el cliente seleccionado",
     "vehiculo_id": "el vehículo seleccionado",
     "repuesto_id": "el repuesto seleccionado",
+    "falla": "la falla",
+    "items": "los ítems",
+    "estado": "el estado",
+    "orden_id": "la orden seleccionada",
 }
 _MENSAJE_GENERICO = "Revisá los datos enviados: hay un valor no válido."
 
@@ -113,6 +117,8 @@ def _mensaje_validacion(error: dict) -> str:
         return "Enviá sólo los datos permitidos para esta operación."
     if tipo == "missing" and ubicacion == ("body",):
         return "Completá los datos de la solicitud."
+    if tipo == "items_repetidos":
+        return "No repitas el mismo repuesto en la orden: sumá las cantidades en un solo ítem."
 
     campo = _CAMPOS_VISIBLES.get(ubicacion[-1]) if len(ubicacion) == 2 else None
     if campo is None:
@@ -123,6 +129,10 @@ def _mensaje_validacion(error: dict) -> str:
         return f"Ingresá texto para {campo}."
     if tipo in ("int_type", "int_parsing", "int_from_float"):
         return f"Ingresá un número entero para {campo}."
+    if tipo == "too_short" and ubicacion[-1] == "items":
+        return "Agregá al menos un ítem a la orden."
+    if tipo == "enum":
+        return f"Elegí un valor válido para {campo}."
     if tipo == "string_too_short":
         return f"Completá {campo} con un texto más largo."
     if tipo == "string_too_long":

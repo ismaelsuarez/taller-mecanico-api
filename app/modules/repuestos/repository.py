@@ -46,6 +46,15 @@ class RepuestoRepository(SoftDeleteRepository[Repuesto]):
         resultado = await self.sesion.execute(consulta)
         return list(resultado.scalars().all()), total
 
+    async def get_vigentes_por_ids(self, ids: list[int]) -> list[Repuesto]:
+        """Los repuestos vigentes entre `ids`, en una sola consulta con parámetros ligados."""
+        if not ids:
+            return []
+        resultado = await self.sesion.execute(
+            select(Repuesto).where(Repuesto.id.in_(ids), Repuesto.borrado_en.is_(None))
+        )
+        return list(resultado.scalars().all())
+
     async def get_by_id_con_movimientos_y_precios(self, id: int) -> Repuesto | None:
         """Repuesto con sus movimientos y su historial de precios (T-10)."""
         resultado = await self.sesion.execute(
