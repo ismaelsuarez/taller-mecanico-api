@@ -150,6 +150,22 @@ Cookie: {{loginCliente.response.headers.Set-Cookie}}
 
 {"email":"registro-http@example.com","password":"{{passwordIncorrecta}}"}
 
+### C-05 — Verificación: los fallos y el bloqueo quedaron en intento_acceso (otra sesión, psql)
+# No es una petición HTTP: se corre con psql tras el sexto intento (misma base que la API).
+# Ejecución (PG_CONTENEDOR = su contenedor de PostgreSQL; con compose: docker compose exec -T db sh -c '...' en lugar de docker exec ...):
+#   echo "SELECT email, ip, exito FROM intento_acceso WHERE email = 'registro-http@example.com' ORDER BY id;" | docker exec -i -e POSTGRES_DB "$PG_CONTENEDOR" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+# (o la misma consulta en psql, DBeaver o el cliente que se use).
+# Esperado: 8 filas, todas con ip 127.0.0.1, en este orden y confirmadas aunque sus peticiones
+# hayan terminado en 401/429 (intento_acceso es la única escritura que no comparte la transacción
+# de su petición; deja filas aunque la petición falle):
+#   1. exito = f   (C-04, loginIncorrecto)
+#   2. exito = t   (C-05, loginCliente: el éxito reinicia el conteo sin borrar la fila anterior)
+#   3. a 7. exito = f   (los cinco fallos, fallo1 a fallo5)
+#   8. exito = f   (el sexto intento, fallo6, respondido 429)
+# Las filas 3 a 8 son las seis nuevas desde el éxito de preparación. Ninguna es exitosa salvo la 2.
+# Eventos: SELECT actor, accion FROM evento_seguridad WHERE accion = 'Login bloqueado por demasiados intentos' ORDER BY id;
+# devuelve UNA fila (actor registro-http@example.com): los cinco 401 no generan eventos.
+
 ### C-03 — Cookie de registro también inicia sesión
 # @name yoRegistro
 # @no-cookie-jar
@@ -287,7 +303,7 @@ Content-Type: application/json
 # @name loginNueva
 # @no-cookie-jar
 # Esperado: 200 {"mensaje":"Sesión iniciada","debe_cambiar_password":false,"expira_en_segundos":1800}
-# Cookie válida; un intento exitoso. Total: 12 intentos (9 fallidos/3 exitosos),
+# Cookie válida; un intento exitoso. Total: 13 intentos (9 fallidos/4 exitosos),
 # cuatro eventos incluido seed (registro, bloqueo y cambio), sin borrar historial.
 POST {{baseUrl}}/auth/login
 Content-Type: application/json

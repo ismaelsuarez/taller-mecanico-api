@@ -48,8 +48,13 @@ UowUsuarioDep = Annotated[UnitOfWorkUsuario, Depends(construir_uow)]
 
 
 async def get_session_intentos(request: Request) -> AsyncIterator[AsyncSession]:
-    # DD-19: otra sesión/transacción y una conexión adicional al consultar/escribir.
-    # Sus intentos confirmados sobreviven al rollback de la petición normal.
+    # EXCEPCIÓN DECLARADA (consigna Ej. 7, RT-SE-09, DD-05/DD-19): la escritura de `intento_acceso`
+    # es la única escritura del sistema que no comparte la transacción de su petición. Existe
+    # porque el fallo que se quiere contar es el mismo que revierte la petición: un intento
+    # fallido anotado en la transacción de la petición se perdería con su rollback.
+    # Costo: deja filas aunque la petición falle, y usa otra conexión del pool.
+    # Por eso es, junto con `get_session`, el único lugar que abre sesiones con la fábrica, y su
+    # sesión sólo alimenta a `UnitOfWorkIntentoAcceso` (lo fija test/pytest/test_capas.py).
     # Esta dependencia crea/cierra la sesión; el UoW nunca la cierra.
     async with request.app.state.fabrica_sesiones() as sesion:
         yield sesion

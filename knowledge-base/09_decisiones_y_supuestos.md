@@ -385,3 +385,8 @@ Confirmado por DD-23.
 ### SU-16 — `TRUNCATE` y `session_replication_role` no están cubiertos por el disparador
 **Supuesto** (EJ-7, D2): el disparador de sólo agregado es `FOR EACH ROW` sobre `UPDATE`/`DELETE`, como pide la consigna; `TRUNCATE` (a nivel de sentencia) no lo dispara, y `seed.py` depende de eso para recargar las tablas de auditoría. Un superusuario también puede desactivar triggers con `SET session_replication_role = replica`; el TP usa un solo rol de base y DD-06 acepta ese límite. No se corrigen (bloquear `TRUNCATE` rompería el seed) ni se agrega el segundo mecanismo de permisos por rol (la consigna no lo pide).
 **Origen**: consigna 6.9, DD-06, `seed.py::_vaciar`. **Riesgo**: bajo. Documentado en el README («Caso C-14»).
+
+### SU-17 — Un error interno antes del resultado del login no deja fila en `intento_acceso`
+**Supuesto** (EJ-7, D5): `intento_acceso` anota el **resultado** de cada login (200, 401 o 429). Si algo interno falla antes de conocerlo (la búsqueda del usuario o el cálculo de bcrypt), la petición termina en 500 sin fila de intento, porque no hay resultado que anotar. Una entrada rechazada por validación (422) tampoco es un intento. Es coherente con que `intento_acceso` sea la única escritura fuera de la transacción de su petición y con su costo declarado en el código («deja filas aunque la petición falle»): lo que no se llegó a decidir no se registra.
+**Origen**: consigna Ej. 7, RT-SE-09, DD-05, DD-19, `app/modules/usuarios/service.py::iniciar_sesion`. **Riesgo**: bajo. La excepción y su costo están declarados en `get_session_intentos`, `UnitOfWorkIntentoAcceso` y `iniciar_sesion`, y fijados por `test/pytest/test_capas.py` (comentarios y sesiones) y `test/pytest/integridad/test_intento_acceso_c05.py` (C-05).
+

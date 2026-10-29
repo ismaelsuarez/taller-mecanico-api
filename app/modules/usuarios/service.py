@@ -138,7 +138,9 @@ async def iniciar_sesion(
     if ventana.fallos >= 5:
         assert ventana.fallo_mas_antiguo is not None
         espera = max(1, ceil((ventana.fallo_mas_antiguo + timedelta(seconds=60) - ahora).total_seconds()))
-        # El intento sobrevive incluso si falla la confirmación del evento normal.
+        # Única escritura del sistema que no comparte la transacción de su petición (DD-05/DD-19):
+        # el fallo que se quiere contar es el mismo que revierte la petición. Costo: deja filas
+        # aunque la petición falle. Aquí se confirma ANTES del evento normal, que sí es de la petición.
         async with intentos:
             await intentos.intentos.add(IntentoAcceso(
                 email=datos.email, ip=ip, cuando=ahora, exito=False,
@@ -160,7 +162,11 @@ async def iniciar_sesion(
     # Sólo primitivas fuera de la lectura; el UoW devuelve la conexión antes de bcrypt.
     correcta = await security.verificar_password(datos.password, password_hash)
     exito = usuario_id is not None and correcta and activo
-    # DD-19: confirma en otra transacción/conexión incluso ante rechazo o rollback normal.
+    # Única escritura del sistema que no comparte la transacción de su petición (DD-05/DD-19):
+    # el fallo que se quiere contar es el mismo que revierte la petición. Costo: deja filas
+    # aunque la petición falle (401, 429 o cualquier excepción posterior), en otra conexión.
+    # Si algo interno falla antes de conocer `exito` (búsqueda del usuario o bcrypt) no hay
+    # resultado que anotar: la petición termina en 500 sin fila de intento (SU-17).
     async with intentos:
         await intentos.intentos.add(IntentoAcceso(
             email=datos.email, ip=ip, cuando=datetime.now(UTC), exito=exito,
