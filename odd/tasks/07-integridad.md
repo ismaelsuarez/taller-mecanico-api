@@ -1,6 +1,6 @@
 # Implementación EJ-7 — Integridad: sólo agregado, atomicidad del historial e `intento_acceso` auditados
 
-Change activo: `openspec/changes/07-integridad/` (proposal + design D1–D9 + 3 specs + tasks, 23 tareas); fuente de verdad funcional. Este archivo sólo registra ejecución, evidencias, rutas y commits. Rama de trabajo: `feat/07-integridad` (desde `main`, base `532bb6c`). Sin push ni merge sin autorización de entrega. Espejo en engram: `odd/07-integridad/tasks` (proyecto `taller`). Governance **CRITICO** (audit trail).
+Change activo: `openspec/changes/07-integridad/` (proposal + design D1–D9 + 3 specs + tasks, 25 tareas); fuente de verdad funcional. Este archivo sólo registra ejecución, evidencias, rutas y commits. Rama de trabajo: `feat/07-integridad` (desde `main`, base `532bb6c`). Sin push ni merge sin autorización de entrega. Espejo en engram: `odd/07-integridad/tasks` (proyecto `taller`). Governance **CRITICO** (audit trail).
 
 ## Objetivo y alcance
 
@@ -49,7 +49,7 @@ Pronóstico de líneas autorales (adiciones + eliminaciones, sin generados): G1 
 
 ## Commits de la feature
 
-Rama `feat/07-integridad` desde `main` (`532bb6c`), de más viejo a más nuevo: `777cb54` artefactos, ODD y baseline (grupo 1) · `f49b3ed` evidencia C-14 ejecutada por la suite, README y KB (grupo 2) · grupo 3 (sólo agregado de filas de la API, `downgrade -1`, repositorios) y un commit docs con su hash.
+Rama `feat/07-integridad` desde `main` (`532bb6c`), de más viejo a más nuevo: `777cb54` artefactos, ODD y baseline (grupo 1) · `f49b3ed` evidencia C-14 ejecutada por la suite, README y KB (grupo 2) · `c70efad` sólo agregado de filas de la API, `downgrade -1` y repositorios (grupo 3) · y un último commit docs que registra este hash (su propio hash no puede constar en este archivo; se obtiene con `git log -1`).
 
 ## Siguiente paso
 
@@ -65,3 +65,4 @@ Grupo 4 (`intento_acceso`: comentario de la excepción por AST + prueba de C-05)
 - L6: Decisiones D-4 registradas en la KB `09`: DD-55 (consolidación de integridad, D1–D4) y SU-16 (`TRUNCATE` y `session_replication_role` fuera del disparador). Los SU de los grupos 4 y 5 (`intento_acceso`, «Y» = id) se escriben en sus grupos.
 - L7: Grupo 2 commiteado como `f49b3ed` (sin 2.4 ni 2.5, ver T2). Observación de superficie: `docs/` no estaba entre las superficies autorizadas del tramo y la tarea 2.4 exige crear `docs/evidencias/C-14-solo-agregado.txt`; se reportó al orquestador en lugar de ampliar la superficie.
 - L8: Grupo 3 sin hallazgos: ningún defecto del disparador ni de los repositorios; el conteo de líneas por actividad de la API coincide con lo previsto en el diseño. Sin cambios de código de producción, migraciones, `seed.py` ni `.env`.
+- L9: Cierre del tramo (grupos 1–3): commits `777cb54`, `f49b3ed`, `c70efad`. Progreso de `tasks.md`: **10/25** (CLI de OpenSpec) — pendientes del tramo: 2.4 y 2.5. Sin push ni merge; `.engram/`, `skills-lock.json` y `.env` sin tocar. Espejo en engram actualizado con el documento completo.
