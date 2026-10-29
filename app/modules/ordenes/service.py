@@ -25,6 +25,7 @@ from app.modules.ordenes.unit_of_work import UnitOfWorkOrden
 from app.modules.usuarios.schemas import IdentidadLectura
 
 ROLES_DE_PERSONAL = ("ADMIN", "RECEPCION", "MECANICO")  # SU-03
+ROLES_QUE_CANCELAN = ("ADMIN", "RECEPCION")  # RN-12: MECANICO es personal pero no cancela
 # Tope de la columna `orden_trabajo.total`, NUMERIC(12,2): 9 999 999 999.99.
 TOTAL_MAXIMO = Decimal("9999999999.99")
 
@@ -70,14 +71,20 @@ async def obtener_orden(
     Un id fuera del rango de la columna no puede existir: es un 404, nunca un error de la base.
     """
     async with uow:
-        orden = None
-        if 1 <= orden_id <= ID_MAXIMO:
-            orden = await uow.ordenes.get_detalle_con_items_e_historial(orden_id)
-        if orden is None:
-            raise NoEncontrado("Orden no encontrada.")
+        orden = await _orden_o_404(uow, orden_id)
         if not await es_personal_o_dueno(uow, identidad, orden):
             raise NoAutorizado("No tenés permiso para ver esta orden.")
         return armar_detalle(orden)
+
+
+async def _orden_o_404(uow: UnitOfWorkOrden, orden_id: int) -> OrdenTrabajo:
+    """La orden con su detalle precargado, o 404; un id fuera del rango de la columna no existe."""
+    orden = None
+    if 1 <= orden_id <= ID_MAXIMO:
+        orden = await uow.ordenes.get_detalle_con_items_e_historial(orden_id)
+    if orden is None:
+        raise NoEncontrado("Orden no encontrada.")
+    return orden
 
 
 async def listar_estados(uow: UnitOfWorkOrden) -> list[EstadoOrdenLectura]:
@@ -189,3 +196,83 @@ async def crear_orden(
         # Relectura con la precarga declarada: refleja los ítems y la línea recién agregados.
         completa = await uow.ordenes.get_detalle_con_items_e_historial(orden.id)
         return armar_detalle(completa)
+
+
+# --- Transiciones (D7): iniciar y cancelar. Terminar llega con su propia tabla de escrituras. ---
+
+# Cómo se nombra cada estado en un 409 («La orden ya está terminada: no se puede cancelar.»).
+_ESTADO_EN_PALABRAS = {
+    EstadoOrdenCodigo.PENDIENTE.value: "todavía está pendiente",
+    EstadoOrdenCodigo.EN_REPARACION.value: "ya está en reparación",
+    EstadoOrdenCodigo.TERMINADA.value: "ya está terminada",
+    EstadoOrdenCodigo.CANCELADA.value: "ya está cancelada",
+}
+
+
+async def puede_cancelar(
+    uow: UnitOfWorkOrden, identidad: IdentidadLectura, orden: OrdenTrabajo,
+) -> bool:
+    """RN-12 (D2): RECEPCION o ADMIN vigentes, o el dueño del vehículo; MECANICO no cancela.
+
+    Es un predicado distinto de `es_personal_o_dueno`, porque «personal» incluye a MECANICO.
+    """
+    if set(ROLES_QUE_CANCELAN) & set(identidad.roles_vigentes):
+        return True
+    return await uow.ordenes.es_dueno_del_vehiculo(identidad.usuario.id, orden.vehiculo_id)
+
+
+async def _transicionar(
+    uow: UnitOfWorkOrden,
+    orden: OrdenTrabajo,
+    desde: EstadoOrdenCodigo,
+    hasta: EstadoOrdenCodigo,
+    usuario_id: int,
+    verbo: str,
+    mecanico_id: int | None = None,
+) -> OrdenDetalle:
+    """Cambia el estado, firma el historial y relee el detalle, todo dentro del bloque abierto.
+
+    El estado se valida antes de la primera escritura: un 409 no deja nada escrito (RN-11).
+    """
+    if orden.estado != desde.value:
+        raise EnConflicto(
+            f"La orden {_ESTADO_EN_PALABRAS[orden.estado]}: no se puede {verbo}."
+        )
+    orden.estado = hasta.value
+    if mecanico_id is not None:
+        orden.mecanico_id = mecanico_id
+    await uow.ordenes.update(orden)
+    await uow.historial.add(HistorialEstadoOrden(
+        orden_id=orden.id, desde_estado=desde.value, hasta_estado=hasta.value,
+        usuario_id=usuario_id, cuando=datetime.now(timezone.utc),
+    ))
+    return armar_detalle(await uow.ordenes.get_detalle_con_items_e_historial(orden.id))
+
+
+async def iniciar_orden(
+    uow: UnitOfWorkOrden, identidad: IdentidadLectura, orden_id: int,
+) -> OrdenDetalle:
+    """`PENDIENTE → EN_REPARACION` y la orden queda asignada a quien la inicia (RN-11).
+
+    El rol MECANICO lo exige la ruta (`requiere_rol`); acá: 404 → estado (409).
+    """
+    async with uow:
+        orden = await _orden_o_404(uow, orden_id)
+        return await _transicionar(
+            uow, orden, EstadoOrdenCodigo.PENDIENTE, EstadoOrdenCodigo.EN_REPARACION,
+            identidad.usuario.id, "iniciar", mecanico_id=identidad.usuario.id,
+        )
+
+
+async def cancelar_orden(
+    uow: UnitOfWorkOrden, identidad: IdentidadLectura, orden_id: int,
+) -> OrdenDetalle:
+    """`PENDIENTE → CANCELADA`: 404 → permiso (403) → estado (409); el permiso va antes (RN-12)."""
+    async with uow:
+        orden = await _orden_o_404(uow, orden_id)
+        if not await puede_cancelar(uow, identidad, orden):
+            raise NoAutorizado("No tenés permiso para cancelar esta orden.")
+        return await _transicionar(
+            uow, orden, EstadoOrdenCodigo.PENDIENTE, EstadoOrdenCodigo.CANCELADA,
+            identidad.usuario.id, "cancelar",
+        )

@@ -188,6 +188,8 @@ La lectura termina antes de verificar/calcular bcrypt (hilo y semáforo existent
 | `GET /ordenes` | ADMIN, RECEPCION, MECANICO |
 | `GET /ordenes/{id}` | Cualquier sesión: el personal ve cualquiera, el dueño del vehículo la suya (403 si no — C-06) |
 | `GET /estados-orden` | Cualquier sesión |
+| `POST /ordenes/{id}/iniciar` | MECANICO |
+| `POST /ordenes/{id}/cancelar` | Sin rol de ruta: RECEPCION, ADMIN o el dueño del vehículo (un MECANICO no cancela; 403 antes que 409 — C-13) |
 
 El alta de personal (`POST /usuarios`) crea usuario + asignación de rol (`otorgada_por` = admin) + evento en un solo UoW, con `debe_cambiar_password = true` (DD-18). Revocar un rol escribe `revocada_en` sin borrar la fila y surte efecto en la siguiente petición de la sesión abierta (C-07); la autoprotección RN-05 impide revocar el propio ADMIN o quedar sin administradores. Los eventos de seguridad se consultan paginados en `GET /eventos` (ADMIN).
 
@@ -254,10 +256,12 @@ Todos los listados devuelven el envoltorio `{items, total, page, size, pages}`; 
 | POST | `/ordenes` | ADMIN, RECEPCION | Alta en `PENDIENTE`: 201 con el detalle; 422 (cuerpo con precio, total o estado, sin ítems, repuestos repetidos o cantidades no positivas); 409 (vehículo o repuesto inexistente o dado de baja, catálogo sin `PENDIENTE`, total fuera de rango) sin dejar filas; 403 para MECANICO y CLIENTE |
 | GET | `/ordenes` | ADMIN, RECEPCION, MECANICO | Listado paginado por id con filtro `?estado=` (`PENDIENTE`, `EN_REPARACION`, `TERMINADA`, `CANCELADA`; otro valor responde 422); `total` cuenta con el mismo filtro. 403 para CLIENTE |
 | GET | `/ordenes/{id}` | Cualquier sesión | Detalle con patente, cliente, ítems (código y descripción del repuesto), subtotales e historial cronológico: 200 / 404 (también un id fuera del rango de enteros) / 422 (id no entero) / 403 si no es personal ni dueño del vehículo (C-06) |
+| POST | `/ordenes/{id}/iniciar` | MECANICO | `PENDIENTE → EN_REPARACION`: la orden queda asignada a quien la inicia y el historial suma su línea. 200 con el detalle; 404 inexistente; 409 si no está pendiente (sin escrituras); 403 para ADMIN sin rol MECANICO, RECEPCION y CLIENTE |
+| POST | `/ordenes/{id}/cancelar` | RECEPCION, ADMIN o dueño del vehículo | `PENDIENTE → CANCELADA` sin tocar stock ni `mecanico_id`. La ruta no lleva `requiere_rol`: el servicio decide el permiso **antes** que el estado (403 a un cliente sobre orden ajena y a cualquier MECANICO, aunque la orden no esté pendiente; 409 sólo con permiso). 200 con el detalle; 404 inexistente |
 
 El alta recibe sólo `{vehiculo_id, falla, items: [{repuesto_id, cantidad}]}`: el precio de cada ítem se copia del repuesto al crear la orden (un cambio de precio posterior no la toca) y el total lo calcula el servidor. La orden, sus ítems y la primera línea de historial (`null → PENDIENTE`, firmada por quien la crea) se confirman en un solo bloque; el stock no baja hasta terminarla.
 
-**Casos manuales:** `test/ordenes.http` reúne C-17 (catálogo y filtro), C-10 (alta y 409) y C-06 (detalle propio, ajeno y de un mecánico). Pasos: levantar la API, correr `python seed.py` sobre la misma base, definir `PASSWORD_ADMIN`, `PASSWORD_RECEPCION`, `PASSWORD_MECANICO` y `PASSWORD_CLIENTE` con las contraseñas del seed (nunca en el archivo) y ejecutar los bloques **en orden**, porque las altas cambian el estado de la base; volvé a correr `python seed.py` antes de repetir el archivo. Pruebas automatizadas: `test/pytest/ordenes/`.
+**Casos manuales:** `test/ordenes.http` reúne C-17 (catálogo y filtro), C-10 (alta y 409), C-06 (detalle propio, ajeno y de un mecánico), iniciar y la parte de C-13 que no depende de terminar (403 ajena, 200 del dueño). Pasos: levantar la API, correr `python seed.py` sobre la misma base, definir `PASSWORD_ADMIN`, `PASSWORD_RECEPCION`, `PASSWORD_MECANICO` y `PASSWORD_CLIENTE` con las contraseñas del seed (nunca en el archivo) y ejecutar los bloques **en orden**, porque las altas cambian el estado de la base; volvé a correr `python seed.py` antes de repetir el archivo. Pruebas automatizadas: `test/pytest/ordenes/`.
 
 ## Primer uso después de clonar (una sola vez)
 

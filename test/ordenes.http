@@ -209,3 +209,58 @@ GET {{baseUrl}}/ordenes/1
 # {"detail": "Orden no encontrada."}
 GET {{baseUrl}}/ordenes/999
 Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### Iniciar: el segundo mecánico toma la orden 3 (la creada en C-10)
+# Sólo MECANICO inicia: la orden pasa a EN_REPARACION, queda asignada a quien la toma (usuario 5)
+# y el historial suma la línea firmada por él. Responde con el detalle actualizado.
+# Esperado: 200 OK
+# {"id": 3, "estado": "EN_REPARACION", "patente": "AC456EF", "total": "68000.00",
+#  "creada_en": "<fecha>", "mecanico_id": 5, "falla": "Ruido al frenar", "cliente": "Laura Cliente",
+#  "items": [<los mismos dos ítems del alta C-10>],
+#  "historial": [
+#   {"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"},
+#   {"desde_estado": "PENDIENTE", "hasta_estado": "EN_REPARACION", "usuario_id": 5, "cuando": "<fecha>"}]}
+POST {{baseUrl}}/ordenes/3/iniciar
+Cookie: {{loginMecanico2.response.headers.Set-Cookie}}
+
+### Iniciar: la misma orden otra vez ya no está pendiente
+# Esperado: 409 Conflict — nada cambia (sigue asignada al usuario 5)
+# {"detail": "La orden ya está en reparación: no se puede iniciar."}
+POST {{baseUrl}}/ordenes/3/iniciar
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### Iniciar: el administrador (sin rol MECANICO) no inicia órdenes
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para realizar esta acción."}
+POST {{baseUrl}}/ordenes/1/iniciar
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-13: Laura no cancela la orden 2, que es de otro cliente (y no está pendiente)
+# El permiso se evalúa ANTES que el estado: 403, nunca 409.
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para cancelar esta orden."}
+POST {{baseUrl}}/ordenes/2/cancelar
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-13: un mecánico tampoco cancela (ni siquiera la orden que tiene asignada)
+# Esperado: 403 Forbidden
+# {"detail": "No tenés permiso para cancelar esta orden."}
+POST {{baseUrl}}/ordenes/2/cancelar
+Cookie: {{loginMecanico.response.headers.Set-Cookie}}
+
+### C-13: Laura cancela su orden pendiente (la 1)
+# La cancelación no toca el stock ni el mecánico; el historial suma la línea firmada por Laura (usuario 6).
+# Esperado: 200 OK
+# {"id": 1, "estado": "CANCELADA", "patente": "AA111BB", "total": "56500.00",
+#  "creada_en": "<fecha>", "mecanico_id": null, "falla": "Cambio de aceite y filtro", "cliente": "Laura Cliente",
+#  "items": [<los mismos dos ítems del bloque C-06>],
+#  "historial": [
+#   {"desde_estado": null, "hasta_estado": "PENDIENTE", "usuario_id": 3, "cuando": "<fecha>"},
+#   {"desde_estado": "PENDIENTE", "hasta_estado": "CANCELADA", "usuario_id": 6, "cuando": "<fecha>"}]}
+POST {{baseUrl}}/ordenes/1/cancelar
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### Cancelar: sin sesión siempre 401
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+POST {{baseUrl}}/ordenes/1/cancelar

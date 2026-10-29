@@ -1,4 +1,5 @@
-"""Rutas del módulo ordenes: `/mis-ordenes` (EJ-5), `/estados-orden`, alta, listado y detalle (EJ-6).
+"""Rutas del módulo ordenes: `/mis-ordenes` (EJ-5), `/estados-orden`, alta, listado, detalle,
+iniciar y cancelar (EJ-6).
 
 Todas pertenecen al grupo protegido de `main.py` (401 sin sesión, 403 con cambio de contraseña
 pendiente). El rol por ruta (`requiere_rol`) sólo se exige donde la matriz RBAC lo pide; el
@@ -92,3 +93,29 @@ async def obtener_orden(
     identidad: UsuarioActualDep,
 ) -> OrdenDetalle:
     return await service.obtener_orden(uow, identidad, orden_id)
+
+
+@router.post(
+    "/ordenes/{orden_id}/iniciar", response_model=OrdenDetalle,
+    dependencies=[Depends(requiere_rol("MECANICO"))],
+    summary="Un mecánico toma una orden pendiente (RN-11)",
+)
+async def iniciar_orden(
+    orden_id: int,
+    uow: UowOrdenDep,
+    identidad: UsuarioActualDep,
+) -> OrdenDetalle:
+    return await service.iniciar_orden(uow, identidad, orden_id)
+
+
+@router.post(
+    "/ordenes/{orden_id}/cancelar", response_model=OrdenDetalle,
+    summary="Cancelación de una orden pendiente: recepción, admin o el dueño (RN-12, C-13)",
+)
+async def cancelar_orden(
+    orden_id: int,
+    uow: UowOrdenDep,
+    identidad: UsuarioActualDep,
+) -> OrdenDetalle:
+    """Sin `requiere_rol` (nota de la consigna): el permiso depende de la orden y lo decide el servicio."""
+    return await service.cancelar_orden(uow, identidad, orden_id)

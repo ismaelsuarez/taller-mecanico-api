@@ -307,6 +307,16 @@ La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por 
 **Decisión**: `RepuestoRepository.registrar_movimiento` valida `stock + cantidad >= 0` **antes** de agregar el movimiento o tocar el stock y, si no alcanza, lanza `StockInsuficiente(EnConflicto)` → 409 con el mensaje «No hay stock suficiente de {descripción} ({código}): hay {n} y se necesitan {m}.». La guarda vive ahí (y no sólo en el servicio de órdenes) para que ningún llamador futuro deje stock negativo; el `CHECK stock >= 0` de la base queda como última defensa. Además, el alta de una orden rechaza con 409 «El total de la orden supera el máximo permitido: revisá las cantidades.» un total mayor a 9 999 999 999.99 (tope de `NUMERIC(12,2)`), nunca un 500. Extiende DD-41 (tope de existencias).
 **Origen**: RN-13, RN-14, S-5, S-9. **Riesgo**: bajo.
 
+### DD-54 — Orden de controles de las transiciones y predicado `puede_cancelar` (EJ-6, D2/D7)
+**Decisión**, de [D2 y D7](../openspec/changes/06-repositorios-uow-ordenes/design.md#d2--dónde-se-decide-cada-permiso-y-en-qué-orden):
+
+1. **Orden de los controles** (identidad → cambio de contraseña pendiente → rol de ruta → servicio): `iniciar` = `requiere_rol("MECANICO")` → 404 → estado `PENDIENTE` (409); `cancelar` = **sin** `requiere_rol` → 404 → `puede_cancelar` (403) → estado `PENDIENTE` (409); `terminar` = `requiere_rol("MECANICO","ADMIN")` → 404 → asignado o ADMIN vigente (403) → estado `EN_REPARACION` (409) → stock (409). El permiso va antes que el estado (RN-12): un cliente sobre una orden ajena no pendiente recibe 403, no 409.
+2. **`puede_cancelar` es un predicado propio**, distinto de `es_personal_o_dueno`: RECEPCION o ADMIN vigentes, o el dueño del vehículo (también con el vehículo dado de baja, DD-28). «Personal» incluye a MECANICO, que **no** cancela (RN-12, matriz): un MECANICO que no sea además RECEPCION/ADMIN/dueño recibe 403 aun siendo el asignado.
+3. En `iniciar` y `terminar`, el rol de ruta precede a la existencia de la orden: un ADMIN sin rol MECANICO recibe 403 al iniciar aunque el id no exista. En `cancelar` la existencia precede al permiso (404 antes que 403), porque el permiso depende de la orden.
+4. Cada transición es un solo bloque: valida el estado antes de la primera escritura (un 409 no deja nada escrito), cambia `estado`, agrega la línea de historial firmada por quien actúa y relee el detalle con la precarga declarada; responde **200 con el detalle** actualizado. `iniciar` asigna `mecanico_id`; `cancelar` y `terminar` no lo tocan.
+5. Mensajes 409 humanos que nombran el estado actual: «La orden ya está terminada: no se puede cancelar.» (también «ya está en reparación», «ya está cancelada», «todavía está pendiente»). Mensaje 403 de cancelar: «No tenés permiso para cancelar esta orden.».
+**Origen**: nota de la consigna «la ruta de cancelar no lleva `requiere_rol`», RN-11, RN-12, DD-27, DD-28, DD-31. **Riesgo**: medio (permisos mixtos rol/dueño).
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos

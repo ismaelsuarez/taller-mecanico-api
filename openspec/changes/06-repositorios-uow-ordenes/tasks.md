@@ -46,9 +46,9 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 7. Transiciones: iniciar y cancelar
 
-- [ ] 7.1 RED/GREEN `POST /ordenes/{id}/iniciar` (`requiere_rol("MECANICO")`): `PENDIENTE → EN_REPARACION`, `mecanico_id` = usuario, línea de historial, 200 con detalle; triangular 409 desde `EN_REPARACION`/`TERMINADA`/`CANCELADA` sin escrituras, 404 inexistente, 403 para ADMIN sin MECANICO y para el MECANICO con cambio pendiente.
-- [ ] 7.2 RED/GREEN `POST /ordenes/{id}/cancelar` sin `requiere_rol`, con el predicado `puede_cancelar` (RECEPCION/ADMIN vigente o dueño) evaluado **antes** del estado: dueño cancela su `PENDIENTE` (200, historial con su id, stock y `mecanico_id` intactos); cliente sobre orden ajena no pendiente → 403 (no 409); MECANICO → 403; recepción sobre `TERMINADA` → 409; 404 inexistente; 401 sin sesión.
-- [ ] 7.3 Agregar a `test/ordenes.http` los bloques de iniciar (200, 409 repetido, 403 de ADMIN) y la parte de C-13 que no depende de terminar (403 ajena, 200 del dueño); registrar en la KB (D-4) el orden de controles de D2 y el predicado `puede_cancelar` como DD.
+- [x] 7.1 RED/GREEN `POST /ordenes/{id}/iniciar` (`requiere_rol("MECANICO")`): `PENDIENTE → EN_REPARACION`, `mecanico_id` = usuario, línea de historial, 200 con detalle; triangular 409 desde `EN_REPARACION`/`TERMINADA`/`CANCELADA` sin escrituras, 404 inexistente, 403 para ADMIN sin MECANICO y para el MECANICO con cambio pendiente.
+- [x] 7.2 RED/GREEN `POST /ordenes/{id}/cancelar` sin `requiere_rol`, con el predicado `puede_cancelar` (RECEPCION/ADMIN vigente o dueño) evaluado **antes** del estado: dueño cancela su `PENDIENTE` (200, historial con su id, stock y `mecanico_id` intactos); cliente sobre orden ajena no pendiente → 403 (no 409); MECANICO → 403; recepción sobre `TERMINADA` → 409; 404 inexistente; 401 sin sesión.
+- [x] 7.3 Agregar a `test/ordenes.http` los bloques de iniciar (200, 409 repetido, 403 de ADMIN) y la parte de C-13 que no depende de terminar (403 ajena, 200 del dueño); registrar en la KB (D-4) el orden de controles de D2 y el predicado `puede_cancelar` como DD.
 
 ## 8. Terminar orden (RN-13): stock, movimientos, estado e historial en un bloque
 
