@@ -59,8 +59,8 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 9. Verificación integrada y Definition of Done
 
-- [ ] 9.1 Correr la suite pytest completa sobre PostgreSQL aislada con esquema de Alembic (incluye el ciclo `upgrade head → downgrade base → upgrade head` de `test_migraciones.py`); registrar aprobados/fallidos/omitidos reales y comparar con el baseline del 1.2 sin regresiones nuevas.
-- [ ] 9.2 Levantar la API, correr `python seed.py` y ejecutar `test/ordenes.http` de punta a punta (C-06, C-10, C-11, C-12 sin aviso, C-13, C-17) y los `.http` previos (cada uno tras `python seed.py`); verificar que `python seed.py` vuelve a dejar el estado inicial después de las pruebas.
+- [x] 9.1 Correr la suite pytest completa sobre PostgreSQL aislada con esquema de Alembic (incluye el ciclo `upgrade head → downgrade base → upgrade head` de `test_migraciones.py`); registrar aprobados/fallidos/omitidos reales y comparar con el baseline del 1.2 sin regresiones nuevas.
+- [x] 9.2 Levantar la API, correr `python seed.py` y ejecutar `test/ordenes.http` de punta a punta (C-06, C-10, C-11, C-12 sin aviso, C-13, C-17) y los `.http` previos (cada uno tras `python seed.py`); verificar que `python seed.py` vuelve a dejar el estado inicial después de las pruebas.
 - [ ] 9.3 Verificación independiente (riesgo ALTO: transacciones de varias escrituras, stock, permisos y helpers compartidos): ningún `commit()` en repositorios, ningún servicio construye su UoW, catálogo de sólo lectura sin herencia, precarga declarada en el método, punto único de stock, 403 antes que 409 en cancelar, matriz de permisos de órdenes, sin secretos ni texto interno en errores; registrar el dictamen sin inventar evidencia.
 - [ ] 9.4 Conciliar specs/diseño/tasks con lo observado, README (rutas y uso de `test/ordenes.http`), `env.example` (sin variables nuevas: verificar), KB `09_decisiones_y_supuestos.md` con todas las DD/SU candidatas del diseño y `10_preguntas_abiertas.md` si surgió alguna duda; validar con `openspec validate 06-repositorios-uow-ordenes --strict`.
 

@@ -88,12 +88,13 @@ Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
 }
 
 ### C-18: el 403 no agregó ninguna línea de historial
+# El historial de precios es sólo ADMIN (matriz RBAC): se lee con la sesión del administrador.
 # Esperado: 200 OK — sigue con exactamente la línea del seed (RN-20)
 # [
 #   {"id": 1, "repuesto_id": 1, "usuario_id": 1, "precio_anterior": "8000.00", "precio_nuevo": "8500.00", "cuando": "<fecha del seed>"}
 # ]
 GET {{baseUrl}}/repuestos/1/precios
-Cookie: {{loginRecepcion.response.headers.Set-Cookie}}
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
 
 ### C-18: cambiar el precio del repuesto (con el rol de escritura)
 # PATCH parcial (RT-PG-03): sólo se envía `precio` y la descripción queda intacta.

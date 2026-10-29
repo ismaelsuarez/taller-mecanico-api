@@ -61,9 +61,12 @@ C-06 completo, C-10, C-11, C-12 (sin aviso), C-13, C-17 en `test/ordenes.http`; 
 
 ## Progreso
 
-Tramo actual: README (4.3, 6.5) y grupos 7-8 (ver Log L11 en adelante). Progreso OpenSpec: 27/31 tareas. Commits de este tramo: README `03a826c`, G7 `15db822`, G8 `b99244a`.
+Tramo actual: grupo 9, verificación integrada (9.1 y 9.2 hechas; ver Log L16). Progreso OpenSpec: 29/31 tareas. Commits de este tramo: README `03a826c`, G7 `15db822`, G8 `b99244a`.
 
 ## Evidencia de verificación
+
+- 9.1 (suite completa integrada, PostgreSQL 16 aislada con esquema Alembic, `taller_test`): **1010 passed + los 2 failed ambientales conocidos** (`test_salud.py::test_el_503_registra_la_causa_en_el_log_sin_secretos` y `test_fixtures_migradas.py::test_migrar_preserva_el_diagnostico_503_en_la_captura_actual`, ambos `TimeoutError` en lugar de `ConnectionRefusedError`), 0 skipped, 9:15 min; idéntico al cierre del grupo 8, cero regresiones nuevas. Incluye `test_migraciones.py` (`upgrade head → downgrade base → upgrade head`).
+- 9.2 (API real con uvicorn + `seed.py` sobre la base `taller` del contenedor, migrada con `alembic upgrade head`; runner propio en el scratchpad que lee cada bloque `.http`, resuelve `{{var}}`/`$processEnv`/cookies por `# @name` y compara estado y cuerpo con el comentario `Esperado`; cada archivo tras `python seed.py`): `test/ordenes.http` 40 bloques, 40 coinciden (33 con cuerpo contrastado automáticamente; 7 solo-estado revisados a mano: cuatro logins con el mismo cuerpo, catálogo igual al del cliente, orden 1 del mecánico 2 idéntica a la de Laura, orden 2 intacta tras el 409); `clientes_vehiculos.http` 13/13; `repuestos.http` 24/24 tras corregir un bloque; `autorizacion.http` 31/31; `auth.http` 29/29 (el único "mismatch" automático fue un artefacto del runner al leer `["MECANICO"]` del comentario; el cuerpo real coincide); `health.http` 2/3: el bloque «base detenida» (503) no se ejecutó (exige detener el contenedor de PostgreSQL; cubierto por `test_salud.py`). Tras las pruebas, `python seed.py` devolvió el estado inicial: conteos por tabla, stocks (1:10, 2:4, 3:2, 4:20), órdenes (1 PENDIENTE, 2 EN_REPARACION mecánico 4) y ids máximos idénticos a la captura previa.
 
 - Cierre del grupo 8: suite completa **1010 passed + los 2 failed ambientales conocidos** (mismos nombres que el baseline: `test_salud.py::test_el_503_registra_la_causa_en_el_log_sin_secretos` y `test_fixtures_migradas.py::test_migrar_preserva_el_diagnostico_503_en_la_captura_actual`), 0 skipped, 8:48 min; +83 pruebas respecto de 927 (G7 47, G8 36), cero regresiones.
 
@@ -74,7 +77,7 @@ Tramo actual: README (4.3, 6.5) y grupos 7-8 (ver Log L11 en adelante). Progreso
 
 ## Siguiente paso
 
-Grupo 9 (verificación integrada y Definition of Done).
+9.3 (verificación independiente por un agente fresco) y 9.4 (conciliación de artefactos, README, KB y `openspec validate --strict`).
 
 ## Log
 
@@ -93,3 +96,4 @@ Grupo 9 (verificación integrada y Definition of Done).
 - L13: Grupo 7 commiteado como `15db822` (iniciar/cancelar, DD-54, bloques `.http`, README).
 - L14: Grupo 8 commiteado como `b99244a` y cerrado. Decisiones: la guarda de stock se apoya en `registrar_movimiento` (DD-53) y el recorrido de ítems es por id; el estado se valida antes de la primera salida; permiso `puede_terminar` = ADMIN vigente o (MECANICO vigente y asignado) (SU-15). Sin cambios de esquema, `seed.py` ni migraciones.
 - L15: Sin push ni merge; `.engram/` intacto; `skills-lock.json` y `.env` sin tocar. Espejo en engram actualizado con el documento completo. Próximo: grupo 9 (verificación integrada, `.http` de punta a punta, verificación independiente y conciliación de artefactos).
+- L16: Tareas 9.1 y 9.2 ejecutadas (ver Evidencia). Hallazgo: en `test/repuestos.http` el bloque «C-18: el 403 no agregó ninguna línea de historial» leía `GET /repuestos/1/precios` con la sesión de la recepción y esperaba 200, pero el historial de precios es sólo ADMIN desde EJ-5 (KB `03`, README): se corrigió el bloque (sesión del administrador) y se agregó la aclaración; el código estaba bien. Sin cambios de código, migraciones ni `seed.py`. API detenida al terminar. Entorno: la base `taller` del contenedor `taller-pg-test` se migró con `alembic upgrade head` (estaba vacía) y quedó sembrada.
