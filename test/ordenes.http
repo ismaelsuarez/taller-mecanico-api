@@ -1,0 +1,93 @@
+# Órdenes de trabajo y catálogo de estados (EJ-6 — change 06-repositorios-uow-ordenes).
+# Extensión REST Client de VS Code. Antes de correr ESTE archivo:  python seed.py
+# El orden de los bloques importa: las altas y transiciones cambian el estado de la base.
+# Definir PASSWORD_ADMIN, PASSWORD_RECEPCION, PASSWORD_MECANICO y PASSWORD_CLIENTE con las
+# contraseñas del seed (viven sólo en seed.py — S-6); mecanico2@ usa la del mecánico.
+# Ids del seed: admin=1, recepcion=3, mecanico=4, mecanico2=5, cliente=6 (Laura).
+# Órdenes del seed: 1 (PENDIENTE, vehículo 1 de Laura) y 2 (EN_REPARACION, vehículo 3 de Jorge,
+# mecánico 4). La primera orden creada por la API es la 3.
+# Las marcas `creada_en`/`cuando` son fechas que varían en cada corrida.
+
+@baseUrl = http://localhost:8000
+@passwordAdmin = {{$processEnv PASSWORD_ADMIN}}
+@passwordRecepcion = {{$processEnv PASSWORD_RECEPCION}}
+@passwordMecanico = {{$processEnv PASSWORD_MECANICO}}
+@passwordCliente = {{$processEnv PASSWORD_CLIENTE}}
+
+### Login del administrador
+# @name loginAdmin
+# @no-cookie-jar
+# Esperado: 200 OK
+# {"mensaje": "Sesión iniciada", "debe_cambiar_password": false, "expira_en_segundos": 1800}
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@example.com","password":"{{passwordAdmin}}"}
+
+### Login de la recepción
+# @name loginRecepcion
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"recepcion@example.com","password":"{{passwordRecepcion}}"}
+
+### Login del mecánico asignado a la orden 2
+# @name loginMecanico
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"mecanico@example.com","password":"{{passwordMecanico}}"}
+
+### Login del segundo mecánico (sin órdenes asignadas)
+# @name loginMecanico2
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"mecanico2@example.com","password":"{{passwordMecanico}}"}
+
+### Login del cliente Laura
+# @name loginCliente
+# @no-cookie-jar
+# Esperado: 200 OK — mismo cuerpo que loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"cliente@example.com","password":"{{passwordCliente}}"}
+
+### C-17: el catálogo de estados con sesión (cualquier rol; acá, el cliente)
+# Los cuatro estados por posición; sólo TERMINADA y CANCELADA son finales (RN-19).
+# Esperado: 200 OK
+# [
+#   {"codigo": "PENDIENTE", "descripcion": "Esperando ser tomada por un mecánico", "posicion": 1, "es_final": false},
+#   {"codigo": "EN_REPARACION", "descripcion": "En curso de reparación", "posicion": 2, "es_final": false},
+#   {"codigo": "TERMINADA", "descripcion": "Reparación terminada", "posicion": 3, "es_final": true},
+#   {"codigo": "CANCELADA", "descripcion": "Orden cancelada", "posicion": 4, "es_final": true}
+# ]
+GET {{baseUrl}}/estados-orden
+Cookie: {{loginCliente.response.headers.Set-Cookie}}
+
+### C-17: el mismo catálogo con la sesión del administrador
+# Esperado: 200 OK — la misma lista de cuatro estados
+GET {{baseUrl}}/estados-orden
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+### C-17: sin sesión no se devuelve el catálogo
+# Esperado: 401 Unauthorized
+# {"detail": "La sesión no es válida. Volvé a iniciar sesión."}
+GET {{baseUrl}}/estados-orden
+
+### C-17: el catálogo no se edita desde la API
+# Sólo existe GET: cualquier escritura es rechazada y las filas no cambian.
+# Esperado: 405 Method Not Allowed
+# {"detail": "Method Not Allowed"}
+POST {{baseUrl}}/estados-orden
+Content-Type: application/json
+Cookie: {{loginAdmin.response.headers.Set-Cookie}}
+
+{"codigo":"NUEVO","descripcion":"No debería crearse","posicion":9,"es_final":false}

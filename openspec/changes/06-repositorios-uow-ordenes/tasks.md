@@ -27,8 +27,8 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 4. Catálogo de estados (sólo lectura) y `GET /estados-orden`
 
-- [ ] 4.1 RED/GREEN: `EstadoOrdenRepository` que no hereda de `BaseRepository` ni ofrece `add`/`update`/`delete`, con `get_all_por_posicion` y `get_by_codigo`; triangular con catálogo vacío y con el seed.
-- [ ] 4.2 RED/GREEN: `EstadoOrdenCodigo` (`StrEnum`) y `EstadoOrdenLectura`; test de alineación contrato ↔ catálogo sembrado (mismos cuatro códigos).
+- [x] 4.1 RED/GREEN: `EstadoOrdenRepository` que no hereda de `BaseRepository` ni ofrece `add`/`update`/`delete`, con `get_all_por_posicion` y `get_by_codigo`; triangular con catálogo vacío y con el seed.
+- [x] 4.2 RED/GREEN: `EstadoOrdenCodigo` (`StrEnum`) y `EstadoOrdenLectura`; test de alineación contrato ↔ catálogo sembrado (mismos cuatro códigos).
 - [ ] 4.3 RED/GREEN: `GET /estados-orden` en el grupo protegido sin `requiere_rol` (200 por posición para ADMIN y CLIENTE, 401 sin sesión, 403 con cambio pendiente; `POST`/`PATCH`/`DELETE` rechazados y OpenAPI sólo con `GET`; el catálogo no cambia). Agregar a `test/ordenes.http` el bloque C-17 (catálogo con sesión y sin sesión) y documentar la ruta en el README.
 
 ## 5. Punto único de escritura de stock con guarda

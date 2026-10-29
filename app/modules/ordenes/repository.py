@@ -115,9 +115,22 @@ class HistorialEstadoOrdenRepository:
 class EstadoOrdenRepository:
     """Catálogo `estado_orden` de sólo lectura (A-5, RN-19): no hereda de `BaseRepository`.
 
-    Su clave es `codigo`, no `id`, y no ofrece escrituras. Las lecturas llegan con la
-    tarea 4.1 (`get_all_por_posicion`, `get_by_codigo`).
+    Su clave es `codigo`, no `id`, y no ofrece escrituras: sólo dos lecturas.
     """
 
     def __init__(self, sesion: AsyncSession) -> None:
         self.sesion = sesion
+
+    async def get_all_por_posicion(self) -> list[EstadoOrden]:
+        """Todos los estados del catálogo en el orden de `posicion`."""
+        resultado = await self.sesion.execute(
+            select(EstadoOrden).order_by(EstadoOrden.posicion)
+        )
+        return list(resultado.scalars().all())
+
+    async def get_by_codigo(self, codigo: str) -> EstadoOrden | None:
+        """El estado con ese código exacto, o nulo si el catálogo no lo tiene."""
+        resultado = await self.sesion.execute(
+            select(EstadoOrden).where(EstadoOrden.codigo == codigo)
+        )
+        return resultado.scalars().first()

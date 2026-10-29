@@ -12,7 +12,7 @@ from app.core.database import SesionDep
 from app.core.dependencies import UsuarioActualDep
 from app.core.paginacion import Pagina, ParametrosPagina
 from app.modules.ordenes import service
-from app.modules.ordenes.schemas import OrdenResumenLectura
+from app.modules.ordenes.schemas import EstadoOrdenLectura, OrdenResumenLectura
 from app.modules.ordenes.unit_of_work import UnitOfWorkOrden
 
 router = APIRouter(tags=["órdenes"])
@@ -36,3 +36,15 @@ async def obtener_mis_ordenes(
     params: Annotated[ParametrosPagina, Query()],
 ) -> Pagina[OrdenResumenLectura]:
     return await service.mis_ordenes(uow, identidad.usuario.id, params.page, params.size)
+
+
+@router.get(
+    "/estados-orden", response_model=list[EstadoOrdenLectura],
+    summary="Catálogo de estados de una orden, por posición (C-17, sólo lectura)",
+)
+async def obtener_estados_orden(
+    uow: UowOrdenDep,
+    _identidad: UsuarioActualDep,
+) -> list[EstadoOrdenLectura]:
+    """Cualquier usuario autenticado; la API no ofrece escrituras sobre el catálogo (A-5)."""
+    return await service.listar_estados(uow)

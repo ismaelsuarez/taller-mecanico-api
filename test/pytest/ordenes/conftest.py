@@ -16,6 +16,11 @@ from app.modules.clientes.models import Cliente, Vehiculo
 from app.modules.ordenes.models import ItemOrden, OrdenTrabajo
 from app.modules.repuestos.models import Repuesto
 from app.modules.usuarios.models import Usuario
+from autorizacion.conftest import (  # noqa: F401  (se reutilizan las sesiones reales de EJ-5, sin duplicarlas)
+    abrir_sesion,
+    api_autorizacion,
+    crear_usuario_autorizacion,
+)
 from conftest import CATALOGO_ESTADOS  # el conftest raíz lo importa pytest como módulo suelto
 
 
@@ -100,3 +105,12 @@ class Datos:
             ))
         await self.sesion.flush()
         return orden
+
+
+@pytest.fixture
+async def base_sembrada(base_migrada):
+    """Esquema de Alembic con los datos iniciales reales de `seed.py` (subproceso, como en producción)."""
+    from test_seed import _ejecutar_seed  # reutiliza el runner del test del seed (sin duplicarlo)
+
+    await _ejecutar_seed()
+    return base_migrada

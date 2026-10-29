@@ -7,7 +7,7 @@ de cancelar (T-8), sin anticipar esos endpoints.
 
 from app.core.paginacion import Pagina, pagina
 from app.modules.ordenes.models import OrdenTrabajo
-from app.modules.ordenes.schemas import OrdenResumenLectura
+from app.modules.ordenes.schemas import EstadoOrdenLectura, OrdenResumenLectura
 from app.modules.ordenes.unit_of_work import UnitOfWorkOrden
 from app.modules.usuarios.schemas import IdentidadLectura
 
@@ -33,6 +33,13 @@ async def mis_ordenes(
         OrdenResumenLectura.model_validate(o, from_attributes=True) for o in items
     ]
     return pagina(lectura, total, page, size)
+
+
+async def listar_estados(uow: UnitOfWorkOrden) -> list[EstadoOrdenLectura]:
+    """El catálogo `estado_orden` por posición; sólo lectura (A-5, RN-19)."""
+    async with uow:
+        estados = await uow.estados.get_all_por_posicion()
+    return [EstadoOrdenLectura.model_validate(e, from_attributes=True) for e in estados]
 
 
 async def es_personal_o_dueno(
