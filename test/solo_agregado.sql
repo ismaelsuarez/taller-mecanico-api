@@ -7,17 +7,20 @@
 -- un estado que no está en el catálogo (una sentencia, rechazada por la clave foránea
 -- orden_trabajo_estado_fkey, SQLSTATE 23503). Ninguna sentencia cambia datos.
 --
--- PRECONDICIÓN: correr `python seed.py` ANTES (y, antes de eso, `alembic upgrade head`).
--- Un disparador FOR EACH ROW no se ejecuta si el UPDATE/DELETE no encuentra filas: sobre una
--- base sin sembrar las seis primeras sentencias terminarían en «0 filas» sin rechazo, y eso
--- NO sería evidencia. Todas apuntan a la fila id = 1 de cada tabla, que existe tras el seed.
--- Se recomienda la base de test (POSTGRES_TEST_DB); sobre la de desarrollo tampoco cambia datos.
+-- PRECONDICIÓN: correr `python seed.py` ANTES (y, antes de eso, `alembic upgrade head`); los tres
+-- comandos (alembic, seed y psql) trabajan sobre la base POSTGRES_DB. Un disparador FOR EACH ROW
+-- no se ejecuta si el UPDATE/DELETE no encuentra filas: sobre una base sin sembrar las seis
+-- primeras sentencias terminarían en «0 filas» sin rechazo, y eso NO sería evidencia. Todas
+-- apuntan a la fila id = 1 de cada tabla, que existe tras el seed. Se recomienda apuntar
+-- POSTGRES_DB a la base de test; sobre la de desarrollo tampoco cambia datos.
 --
 -- CÓMO CORRERLO (-a muestra cada sentencia junto a su error: esa salida es la evidencia):
---   venv / sin Docker (PGPASSWORD se toma de la variable de entorno; no va en este archivo):
---     psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a -f test/solo_agregado.sql
---   Docker (el contenedor db ya tiene las variables del .env):
---     docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a' < test/solo_agregado.sql
+--   Docker Compose del equipo (el servicio db ya tiene las variables del .env):
+--     docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a' < test/solo_agregado.sql
+--   Contenedor de PostgreSQL sin compose (PG_CONTENEDOR = su nombre en `docker ps`; no hace falta psql en el host):
+--     docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a' < test/solo_agregado.sql
+--   psql instalado en el host (la contraseña sale de PGPASSWORD; no va en este archivo):
+--     psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a -f test/solo_agregado.sql
 --
 -- EVIDENCIA DE ENTREGA: la captura de pantalla de esa salida es la evidencia C-14. La salida
 -- textual de referencia está en docs/evidencias/C-14-solo-agregado.txt.

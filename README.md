@@ -202,21 +202,30 @@ El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) decide el 403
 
 `historial_estado_orden`, `movimiento_stock` e `historial_precio_repuesto` son de **sólo agregado** (RN-15): un disparador de la segunda migración rechaza todo `UPDATE` y `DELETE`, venga de la API, de `psql` o de otro cliente. `test/solo_agregado.sql` lo demuestra con seis rechazos del disparador (error `23001`) y un séptimo de la clave foránea del catálogo (`orden_trabajo_estado_fkey`, error `23503`); no cambia ningún dato. Cada sentencia lleva su resultado esperado en un comentario.
 
-**Precondición:** `alembic upgrade head` y `python seed.py` antes. Las sentencias apuntan a la fila `id = 1` del seed; sobre una base vacía no se rechazaría nada (un disparador por fila no actúa si no hay filas) y no sería evidencia. Usá la base de test (`POSTGRES_TEST_DB`).
+**Precondición:** `alembic upgrade head` y `python seed.py` antes; los dos y el `psql` de abajo trabajan sobre la base `POSTGRES_DB` (apuntá a la base de test, p. ej. `export POSTGRES_DB="$POSTGRES_TEST_DB"`, antes de los tres). Las sentencias apuntan a la fila `id = 1` del seed; sobre una base vacía no se rechazaría nada (un disparador por fila no actúa si no hay filas) y no sería evidencia.
+
+Elegí la forma que corresponda a tu entorno (las tres corren el mismo archivo):
 
 ```bash
-# Sin Docker (venv; psql toma la contraseña de la variable de entorno PGPASSWORD):
-psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a -f test/solo_agregado.sql
+# 1. Docker Compose del equipo (el servicio db ya tiene las variables del .env):
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a' < test/solo_agregado.sql
 
-# Con Docker (el contenedor db ya tiene las variables del .env):
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -a' < test/solo_agregado.sql
+# 2. Contenedor de PostgreSQL sin compose ni psql en el host (PG_CONTENEDOR = nombre en `docker ps`):
+docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a' < test/solo_agregado.sql
+
+# 3. psql instalado en el host (la contraseña sale de la variable de entorno PGPASSWORD):
+psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a -f test/solo_agregado.sql
 ```
 
-`-a` muestra cada sentencia junto a su error: esa salida es la evidencia.
+`-a` muestra cada sentencia junto a su error: esa salida es la evidencia. Para guardarla en un archivo con cada error junto a su sentencia, el `psql` va con `stdbuf -o0` y `2>&1` dentro del `sh -c` (en una terminal no hace falta):
+
+```bash
+docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c 'stdbuf -o0 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a 2>&1' < test/solo_agregado.sql > docs/evidencias/C-14-solo-agregado.txt
+```
 
 - **Resultado esperado:** seis `ERROR: La tabla … es de sólo agregado: no se puede modificar ni borrar.`, un `violates foreign key constraint "orden_trabajo_estado_fkey"` y un último `SELECT` con las cantidades sin cambios (`3 | 4 | 1 | 2` tras el seed).
 - **Captura para la entrega:** ejecutá el comando en una terminal y sacá la captura de pantalla con los siete errores y el `SELECT` final a la vista; no se genera automáticamente.
-- **Evidencia textual de referencia:** `docs/evidencias/C-14-solo-agregado.txt`. Si la guardás vos con una redirección a archivo, agregá `stdbuf -o0` antes de `psql` y `2>&1` dentro del `sh -c` para que cada error quede junto a su sentencia.
+- **Evidencia textual de referencia:** `docs/evidencias/C-14-solo-agregado.txt` (la salida de `psql -a` sobre la base de test recién sembrada: siete `ERROR` y los conteos `3 | 4 | 1 | 2`). Se regenera con el último comando de arriba.
 - **Automática:** `test/pytest/integridad/test_solo_agregado_sql.py` ejecuta **las mismas sentencias** de ese archivo sobre la base de test migrada y sembrada, y verifica los códigos `23001` y `23503`; así la evidencia manual y la de la suite no pueden divergir.
 - **Límites aceptados:** `TRUNCATE` (que usa `seed.py`) y un superusuario con `session_replication_role = replica` esquivan el disparador por fila (SU-16).
 
