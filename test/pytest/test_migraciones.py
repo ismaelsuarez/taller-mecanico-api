@@ -59,6 +59,8 @@ async def _alembic(motor, *comandos: str) -> None:
                     pool.submit(command.upgrade, cfg, "head").result()
                 elif comando == "downgrade":
                     pool.submit(command.downgrade, cfg, "base").result()
+                elif comando == "downgrade -1":
+                    pool.submit(command.downgrade, cfg, "-1").result()
                 else:
                     raise ValueError(comando)
 
@@ -248,3 +250,66 @@ class TestDisparadorSoloAgregado:
             base_para_migraciones,
             "SELECT proname FROM pg_proc WHERE proname = 'solo_agregado'",
         ), "El downgrade debe eliminar la función solo_agregado"
+
+
+TRIGGERS = (
+    "trg_historial_estado_orden_solo_agregado",
+    "trg_movimiento_stock_solo_agregado",
+    "trg_historial_precio_repuesto_solo_agregado",
+)
+MODIFICACIONES = {
+    "historial_estado_orden": "UPDATE historial_estado_orden SET hasta_estado = 'PENDIENTE' WHERE id = 1",
+    "movimiento_stock": "UPDATE movimiento_stock SET cantidad = 99 WHERE id = 1",
+    "historial_precio_repuesto": "UPDATE historial_precio_repuesto SET precio_nuevo = 1 WHERE id = 1",
+}
+
+
+async def _cantidad(motor, consulta: str) -> int:
+    async with motor.connect() as conn:
+        return (await conn.execute(text(consulta))).scalar_one()
+
+
+@pytest.mark.asyncio
+class TestDowngradeDeUnPaso:
+    """Retirar sólo la migración 2 (EJ-7, D1): quita el disparador y su función, deja las tablas."""
+
+    async def _hasta_la_migracion_1(self, motor):
+        # Reutiliza las filas de TestDisparadorSoloAgregado y luego retrocede un paso.
+        await TestDisparadorSoloAgregado()._preparar(motor)
+        await _alembic(motor, "downgrade -1")
+
+    async def test_quita_los_tres_disparadores_y_la_funcion_pero_deja_las_tablas(self, base_para_migraciones):
+        motor = base_para_migraciones
+        await self._hasta_la_migracion_1(motor)
+
+        for tabla in MODIFICACIONES:
+            assert await _existe(motor, f"SELECT to_regclass('{tabla}')"), f"La tabla {tabla} debe seguir existiendo"
+        nombres = ", ".join(f"'{trigger}'" for trigger in TRIGGERS)
+        assert await _cantidad(motor, f"SELECT count(*) FROM pg_trigger WHERE tgname IN ({nombres})") == 0
+        assert await _cantidad(motor, "SELECT count(*) FROM pg_proc WHERE proname = 'solo_agregado'") == 0
+        assert await _cantidad(motor, "SELECT count(*) FROM alembic_version WHERE version_num = 'f8513bf4e6fc'") == 1
+
+    @pytest.mark.parametrize("tabla", list(MODIFICACIONES))
+    async def test_un_update_y_un_delete_sobre_una_fila_ya_se_admiten(self, base_para_migraciones, tabla):
+        """Contraparte del rechazo: si el disparador quedara, estas sentencias fallarían."""
+        motor = base_para_migraciones
+        await self._hasta_la_migracion_1(motor)
+
+        async with motor.begin() as conn:
+            assert (await conn.execute(text(MODIFICACIONES[tabla]))).rowcount == 1
+            assert (await conn.execute(text(f"DELETE FROM {tabla} WHERE id = 1"))).rowcount == 1
+
+    async def test_el_upgrade_posterior_reinstala_los_tres_disparadores_y_vuelve_a_rechazar(
+        self, base_para_migraciones
+    ):
+        motor = base_para_migraciones
+        await self._hasta_la_migracion_1(motor)
+
+        await _alembic(motor, "upgrade")
+
+        for trigger in TRIGGERS:
+            assert await _cantidad(motor, f"SELECT count(*) FROM pg_trigger WHERE tgname = '{trigger}'") == 1
+        assert await _cantidad(motor, "SELECT count(*) FROM pg_proc WHERE proname = 'solo_agregado'") == 1
+        for tabla, modificacion in MODIFICACIONES.items():
+            mensaje = await _falla(motor, modificacion)
+            assert "sólo agregado" in mensaje, f"{tabla}: {mensaje}"

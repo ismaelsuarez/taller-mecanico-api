@@ -10,6 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from app.core.repository import BaseRepository
+from app.modules.ordenes.repository import HistorialEstadoOrdenRepository
+from app.modules.repuestos.repository import HistorialPrecioRepository, MovimientoStockRepository
+
 RAIZ = Path(__file__).resolve().parents[2]
 MODULOS_CON_DATOS = ("usuarios", "clientes", "repuestos", "ordenes")
 UOW_BASE = RAIZ / "app" / "core" / "unit_of_work.py"
@@ -93,3 +97,47 @@ def test_servicios_y_routers_no_ejecutan_sql(nombre):
             if isinstance(funcion, ast.Name) and funcion.id == "select":
                 ofensores.append(f"{_relativa(ruta)}:{llamada.lineno} select()")
     assert ofensores == []
+
+
+# --- RN-15 en la capa de aplicación (EJ-7, spec persistencia-transaccional, design D8) -------------
+
+REPOSITORIOS_DE_SOLO_AGREGADO = (
+    HistorialEstadoOrdenRepository, MovimientoStockRepository, HistorialPrecioRepository,
+)
+PREFIJOS_DE_MODIFICACION = ("update", "delete", "soft_delete", "remove", "actualizar", "modificar", "borrar", "eliminar")
+
+
+def _ofensas_de_solo_agregado(clase: type) -> list[str]:
+    """Todo lo que permitiría modificar o borrar: herencia del repositorio genérico o métodos de escritura."""
+    ofensas = ["hereda de BaseRepository (trae update y delete)"] if issubclass(clase, BaseRepository) else []
+    ofensas += [
+        f"expone {nombre}()" for nombre in dir(clase)
+        if nombre.lower().startswith(PREFIJOS_DE_MODIFICACION) and callable(getattr(clase, nombre))
+    ]
+    return ofensas
+
+
+@pytest.mark.parametrize("repositorio", REPOSITORIOS_DE_SOLO_AGREGADO, ids=lambda clase: clase.__name__)
+def test_los_repositorios_de_solo_agregado_no_modifican_ni_borran(repositorio):
+    """Caracterización: ya era así; la prueba lo fija. El alta sigue disponible."""
+    assert _ofensas_de_solo_agregado(repositorio) == []
+    assert callable(repositorio.add)
+
+
+def test_el_detector_de_solo_agregado_ve_un_update_propio_y_la_herencia_del_repositorio_generico():
+    """Sensibilidad: el detector falla con clases que sí modifican, así que su `[]` no es vacío."""
+
+    class ConUpdate:
+        async def add(self, linea): ...
+        async def update(self, linea): ...
+
+    class ConSoftDelete:
+        async def soft_delete(self, linea): ...
+
+    class Heredado(BaseRepository):
+        pass
+
+    assert _ofensas_de_solo_agregado(ConUpdate) == ["expone update()"]
+    assert _ofensas_de_solo_agregado(ConSoftDelete) == ["expone soft_delete()"]
+    assert "hereda de BaseRepository (trae update y delete)" in _ofensas_de_solo_agregado(Heredado)
+    assert {"expone update()", "expone delete()"} <= set(_ofensas_de_solo_agregado(Heredado))
