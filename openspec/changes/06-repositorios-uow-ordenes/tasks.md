@@ -33,8 +33,8 @@ Plan de ejecución de `/opsx:apply 06-repositorios-uow-ordenes`. Las casillas se
 
 ## 5. Punto único de escritura de stock con guarda
 
-- [ ] 5.1 Red de seguridad: correr `test/pytest/test_repuestos.py` y `test_repuestos_limites.py` y anotar el baseline.
-- [ ] 5.2 RED/GREEN: `registrar_movimiento` con una salida mayor al stock lanza `StockInsuficiente` (subclase de `EnConflicto`, 409, mensaje humano con descripción, código y cantidades) sin agregar movimiento ni cambiar el stock; triangular con salida exacta al stock (queda 0) y con entrada positiva (sin cambios de comportamiento). Verificar que alta con stock inicial y reposición siguen en verde y que una prueba de inspección confirma que sólo el punto único asigna `stock` de un repuesto existente.
+- [x] 5.1 Red de seguridad: correr `test/pytest/test_repuestos.py` y `test_repuestos_limites.py` y anotar el baseline.
+- [x] 5.2 RED/GREEN: `registrar_movimiento` con una salida mayor al stock lanza `StockInsuficiente` (subclase de `EnConflicto`, 409, mensaje humano con descripción, código y cantidades) sin agregar movimiento ni cambiar el stock; triangular con salida exacta al stock (queda 0) y con entrada positiva (sin cambios de comportamiento). Verificar que alta con stock inicial y reposición siguen en verde y que una prueba de inspección confirma que sólo el punto único asigna `stock` de un repuesto existente.
 
 ## 6. Contratos, alta, listado y detalle de órdenes
 

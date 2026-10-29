@@ -46,6 +46,16 @@ class EnConflicto(ErrorDeDominio):
     """La operación choca con una regla de unicidad o de negocio → 409."""
 
 
+class StockInsuficiente(EnConflicto):
+    """Una salida pide más unidades que el stock del repuesto → 409 con mensaje humano (RN-13)."""
+
+    def __init__(self, descripcion: str, codigo: str, disponible: int, pedido: int) -> None:
+        super().__init__(
+            f"No hay stock suficiente de {descripcion} ({codigo}): "
+            f"hay {disponible} y se necesitan {pedido}."
+        )
+
+
 class NoAutenticado(ErrorDeDominio):
     """Credenciales rechazadas con mensaje público → 401."""
 

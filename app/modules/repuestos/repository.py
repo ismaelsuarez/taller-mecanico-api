@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.errores import StockInsuficiente
 from app.core.repository import SoftDeleteRepository
 from app.modules.repuestos.models import HistorialPrecio, MovimientoStock, Repuesto
 
@@ -86,7 +87,14 @@ class RepuestoRepository(SoftDeleteRepository[Repuesto]):
 
         Lo usan el alta con `stock_inicial`, la reposición y (EJ-6) la terminación
         de órdenes. `cantidad > 0` suma, `cantidad < 0` resta (SU-08).
+
+        La guarda vive acá y no en el llamador (D5): una salida mayor al stock lanza
+        `StockInsuficiente` (409) **antes** de agregar el movimiento o tocar el stock,
+        así ningún llamador futuro deja stock negativo; el `CHECK` de la base queda
+        como última defensa.
         """
+        if repuesto.stock + cantidad < 0:
+            raise StockInsuficiente(repuesto.descripcion, repuesto.codigo, repuesto.stock, -cantidad)
         movimiento = MovimientoStock(
             repuesto_id=repuesto.id,
             orden_id=orden_id,
