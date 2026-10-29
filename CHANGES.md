@@ -293,7 +293,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
 ## FASE 6 — Integridad, rendimiento y asincronía
 
 ### [EJ-7] `07-integridad`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado y archivado (2026-10-29; 1053 tests + 2 fallos ambientales conocidos de Windows/loopback; verificación independiente APROBADA 12/12; C-14 completo, C-05 (los cinco fallos quedan en `intento_acceso`), C-18 (atomicidad del cambio de precio))
 - **Ejercicio / puntos**: Ejercicio 7 — 10 pts (10 %)
 - **Scope**:
   - **Sólo agregado**: el disparador ya existe desde la migración 2 del Ej. 2 (T-6); este change lo **demuestra y consolida**. `test/solo_agregado.sql` con `UPDATE` y `DELETE` sobre `historial_estado_orden`, `movimiento_stock` y `historial_precio_repuesto` (los seis rechazados por el disparador) y el intento de insertar una orden con un estado inexistente del catálogo (rechazado por la **clave foránea**). Captura de `psql` como evidencia de entrega.
