@@ -86,6 +86,10 @@ Si el catálogo `estado_orden` no tiene el estado `PENDIENTE` (por ejemplo, est�
 - **WHEN** se consulta `GET /ordenes/999`
 - **THEN** responde 404 con mensaje humano
 
+#### Scenario: Id fuera del rango de la columna
+- **WHEN** se consulta `GET /ordenes/0` o `GET /ordenes/2147483648`
+- **THEN** responde 404 con el mismo mensaje humano, nunca 422 ni un error de la base (DD-52)
+
 ### Requirement: Quién ve el detalle de una orden
 
 El personal (ADMIN, RECEPCION, MECANICO vigentes) MUST ver el detalle de cualquier orden (DD-27). Un usuario sin rol de personal MUST verla sólo si es el dueño del vehículo —incluso si el vehículo fue dado de baja (DD-28)— y MUST recibir 403 con mensaje humano para cualquier otra (RN-17, C-06). Sin sesión, 401.
@@ -129,6 +133,10 @@ El personal (ADMIN, RECEPCION, MECANICO vigentes) MUST ver el detalle de cualqui
 #### Scenario: Recepción o cliente
 - **WHEN** la recepción o un cliente intentan terminar una orden
 - **THEN** responde 403
+
+#### Scenario: El rol de la ruta precede a la existencia de la orden
+- **WHEN** la recepción intenta terminar una orden que no existe
+- **THEN** responde 403, no 404 (SU-15); un mecánico o un ADMIN con la misma orden inexistente reciben 404
 
 ### Requirement: Terminación atómica que descuenta stock
 

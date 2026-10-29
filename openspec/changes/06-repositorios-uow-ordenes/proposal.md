@@ -13,7 +13,7 @@ EJ-1..5 están archivados y publicados: hay autenticación, RBAC por petición y
 - **Entregables de prueba**: `test/ordenes.http` con C-06 (completo), C-10, C-11, C-12 (sin aviso), C-13 y C-17; pytest + httpx sobre PostgreSQL real migrada con Alembic en `test/pytest/ordenes/`.
 - **Sin aviso en segundo plano** (T-9, llega en EJ-8) y **sin migraciones** (el esquema de EJ-2 ya tiene las cuatro tablas de órdenes, el catálogo y el disparador de sólo agregado).
 
-**Fuera de alcance:** `BackgroundTasks` y la evidencia de consultas fijas C-15 (EJ-8; el detalle sí se precarga ya, T-10), la evidencia `psql` de C-14 y la auditoría de `intento_acceso` (EJ-7), control de concurrencia del stock (DD-08), edición o borrado de órdenes, ítems o catálogo desde la API (A-5, RN-19). Este pedido produce planificación solamente.
+**Fuera de alcance:** `BackgroundTasks` y la evidencia de consultas fijas C-15 (EJ-8; el detalle sí se precarga ya, T-10), la evidencia `psql` de C-14 y la auditoría de `intento_acceso` (EJ-7), control de concurrencia del stock (DD-08), edición o borrado de órdenes, ítems o catálogo desde la API (A-5, RN-19). Esta propuesta se redactó como planificación; la ejecución y su evidencia quedaron registradas en `odd/tasks/06-repositorios-uow-ordenes.md`.
 
 ## Capabilities
 
@@ -29,7 +29,7 @@ Ninguna. `catalogo-repuestos` ya exige que el stock cambie sólo por el punto ú
 
 ## Impact
 
-- **Código**: `app/core/{repository,unit_of_work,errores}.py`; `app/modules/ordenes/{schemas,repository,unit_of_work,service,router}.py` (los modelos de EJ-2 no cambian); `app/modules/repuestos/repository.py` (guarda en el punto único); `app/modules/clientes/{repository,unit_of_work}.py` (órdenes abiertas vía `OrdenRepository`); `app/modules/usuarios/unit_of_work.py` (se elimina el rollback duplicado al subirlo a la base).
+- **Código**: `app/core/{unit_of_work,errores}.py` (`app/core/repository.py` se auditó y quedó sin cambios); `app/modules/ordenes/{schemas,repository,unit_of_work,service,router}.py` (los modelos de EJ-2 no cambian); `app/modules/repuestos/repository.py` (guarda en el punto único); `app/modules/clientes/{repository,service,unit_of_work}.py` (órdenes abiertas vía `OrdenRepository`); `app/modules/usuarios/unit_of_work.py` (se elimina el rollback duplicado al subirlo a la base).
 - **Persistencia**: sin migraciones ni cambios en `seed.py`; usa `orden_trabajo`, `item_orden`, `historial_estado_orden`, `movimiento_stock`, `repuesto` y `estado_orden` tal como los creó EJ-2. Las órdenes del seed (1 `PENDIENTE` de Laura, 2 `EN_REPARACION` de Jorge con 4 bujías y stock 2) son la base de C-11/C-12/C-13.
 - **Riesgo**: dominio ALTO — transacciones de varias escrituras sobre stock y dinero y una máquina de estados con permisos; los helpers compartidos (`UnitOfWork` base, traductor 422) afectan a los cuatro módulos y exigen regresión completa.
 - **Pruebas/documentación**: nuevo `test/ordenes.http`, `test/pytest/ordenes/`, README (rutas de órdenes) y decisiones/supuestos nuevos en `knowledge-base/09_decisiones_y_supuestos.md` (D-4). Sin dependencias ni variables de entorno nuevas.

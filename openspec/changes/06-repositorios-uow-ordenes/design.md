@@ -30,13 +30,13 @@ Ver `proposal.md` para motivación y alcance; `specs/ordenes-trabajo`, `specs/es
 
 | Operación | Entrada | Salida |
 |---|---|---|
-| `POST /ordenes` 201 | `OrdenCrear {vehiculo_id: int ≥1, falla: str 1..500, items: list[ItemOrdenCrear] min 1}`; `ItemOrdenCrear {repuesto_id: int ≥1, cantidad: int 1..2147483647}`; `model_validator` rechaza `repuesto_id` repetidos; todo `extra="forbid"` | `OrdenDetalle` con la forma exacta del ejemplo de la consigna: `{id, estado, patente, total, creada_en, mecanico_id, falla, cliente, items:[{repuesto_id, codigo, descripcion, cantidad, precio_unitario, subtotal}], historial:[{desde_estado, hasta_estado, usuario_id, cuando}]}` |
+| `POST /ordenes` 201 | `OrdenCrear {vehiculo_id: int 1..2147483647, falla: str 1..500, items: list[ItemOrdenCrear] min 1}`; `ItemOrdenCrear {repuesto_id: int 1..2147483647, cantidad: int 1..2147483647}`; `model_validator` rechaza `repuesto_id` repetidos; todo `extra="forbid"` | `OrdenDetalle` con la forma exacta del ejemplo de la consigna: `{id, estado, patente, total, creada_en, mecanico_id, falla, cliente, items:[{repuesto_id, codigo, descripcion, cantidad, precio_unitario, subtotal}], historial:[{desde_estado, hasta_estado, usuario_id, cuando}]}` |
 | `GET /ordenes` 200 | `ParametrosOrdenes {page, size, estado?: EstadoOrdenCodigo}` | `Pagina[OrdenResumenLectura]` (el resumen ya usado por `/mis-ordenes`, sin cambiar su contrato) |
 | `GET /ordenes/{id}` 200 | — | `OrdenDetalle` |
 | `POST /ordenes/{id}/iniciar\|terminar\|cancelar` 200 | Sin cuerpo | `OrdenDetalle` ya actualizado |
 | `GET /estados-orden` 200 | — | `list[EstadoOrdenLectura {codigo, descripcion, posicion, es_final}]` sin paginar (4 filas fijas; la tabla de rutas sólo lista 200) |
 
-`EstadoOrdenCodigo` es un `StrEnum` con los cuatro códigos del seed: es el contrato de la API (422) mientras la FK al catálogo es la garantía de la base (DD-02). Dinero como `Decimal` serializado con dos decimales (`subtotal = cantidad × precio_unitario`). El historial se devuelve ordenado por `(cuando, id)`.
+`EstadoOrdenCodigo` es un `StrEnum` con los cuatro códigos del seed: es el contrato de la API (422) mientras la FK al catálogo es la garantía de la base (DD-02). Dinero como `Decimal` serializado con dos decimales (`subtotal = cantidad × precio_unitario`). El historial se devuelve ordenado por `(cuando, id)` y los ítems por id (orden del alta); ambos órdenes los aplica el serializador del servicio, no el repositorio. Un `orden_id` de la ruta fuera de `1..2147483647` no puede existir y responde 404 (nunca 422 ni un error de la base); un id no entero sigue siendo 422 (DD-52).
 
 *Alternativas descartadas*: devolver `{vehiculo:{...}, cliente:{...}}` anidados (no coincide con el ejemplo de la consigna que la corrección compara); paginar `/estados-orden` (agrega 422 que la tabla de rutas no contempla); respuestas 204 en las transiciones (el cliente perdería el estado resultante que C-12/C-13 muestran).
 
@@ -48,13 +48,13 @@ Ver `proposal.md` para motivación y alcance; `specs/ordenes-trabajo`, `specs/es
 | `GET /ordenes` | `requiere_rol("ADMIN","RECEPCION","MECANICO")` | — |
 | `GET /ordenes/{id}` | sólo sesión (grupo protegido) | 404 → `es_personal_o_dueno` (403) |
 | `POST /ordenes/{id}/iniciar` | `requiere_rol("MECANICO")` | 404 → estado `PENDIENTE` (409) |
-| `POST /ordenes/{id}/terminar` | `requiere_rol("MECANICO","ADMIN")` | 404 → ADMIN vigente **o** `mecanico_id == usuario` (403) → estado `EN_REPARACION` (409) → stock (409) |
+| `POST /ordenes/{id}/terminar` | `requiere_rol("MECANICO","ADMIN")` | 404 → `puede_terminar` = ADMIN vigente **o** (MECANICO vigente **y** `mecanico_id == usuario`) (403) → estado `EN_REPARACION` (409) → stock (409) |
 | `POST /ordenes/{id}/cancelar` | **ninguna** (nota de la consigna) | 404 → `puede_cancelar` = RECEPCION/ADMIN vigente **o** dueño del vehículo (403) → estado `PENDIENTE` (409) |
 | `GET /estados-orden` | sólo sesión | — |
 
 `puede_cancelar` es un predicado nuevo y separado de `es_personal_o_dueno` porque «personal» incluye a MECANICO, que no cancela. Ambos usan `OrdenRepository.es_dueno_del_vehiculo` (dueño = `cliente.usuario_id` del vehículo, también dado de baja — DD-28).
 
-En terminar, el rol en la ruta hace que RECEPCION/CLIENTE reciban 403 aun para un id inexistente: la consigna lista 403 y 404 para la ruta y RN-12 fija «permiso antes que estado»; se acepta que el permiso por rol preceda a la existencia. Un mecánico asignado que perdió el rol MECANICO recibe 403 (RN-04: los permisos salen de los roles vigentes) — **supuesto nuevo, SU candidato**.
+En terminar, el rol en la ruta hace que RECEPCION/CLIENTE reciban 403 aun para un id inexistente: la consigna lista 403 y 404 para la ruta y RN-12 fija «permiso antes que estado»; se acepta que el permiso por rol preceda a la existencia. Un mecánico asignado que perdió el rol MECANICO recibe 403 (RN-04: los permisos salen de los roles vigentes) — registrado como SU-15.
 
 *Alternativa descartada*: `terminar` sin `requiere_rol` y todo en el servicio — duplica en el servicio la consulta de roles que `requiere_rol` ya resuelve y mezcla dos responsabilidades.
 
@@ -78,7 +78,7 @@ En terminar, el rol en la ruta hace que RECEPCION/CLIENTE reciban 403 aun para u
 
 ### D5 — Punto único de stock con guarda
 
-`registrar_movimiento(repuesto, cantidad, motivo, usuario_id, orden_id=None)` valida `repuesto.stock + cantidad >= 0` **antes** de agregar el movimiento o tocar el stock; si no, lanza `StockInsuficiente(EnConflicto)` con un mensaje humano que nombra el repuesto por descripción y código y las cantidades («No hay stock suficiente de Bujía de encendido (BUJ-014): hay 2 y la orden pide 4.»). La guarda vive en el punto único (y no sólo en el servicio de órdenes) para que ningún llamador futuro pueda dejar stock negativo; el `CHECK` de la base queda como última defensa. El tope superior de reposición (`MAXIMO_STOCK`, DD-41) se mantiene en el servicio de repuestos sin cambios.
+`registrar_movimiento(repuesto, cantidad, motivo, usuario_id, orden_id=None)` valida `repuesto.stock + cantidad >= 0` **antes** de agregar el movimiento o tocar el stock; si no, lanza `StockInsuficiente(EnConflicto)` con un mensaje humano que nombra el repuesto por descripción y código y las cantidades («No hay stock suficiente de Bujía de encendido (BUJ-014): hay 2 y se necesitan 4.»). `StockInsuficiente` vive en `app/core/errores.py`, junto a `EnConflicto`, para no agregar archivos fuera de la estructura obligatoria (A-2) y para que el traductor de dominio lo resuelva a 409 sin cambios. La guarda vive en el punto único (y no sólo en el servicio de órdenes) para que ningún llamador futuro pueda dejar stock negativo; el `CHECK` de la base queda como última defensa. El tope superior de reposición (`MAXIMO_STOCK`, DD-41) se mantiene en el servicio de repuestos sin cambios.
 
 Terminar recorre los ítems en orden de id llamando al punto único con `-cantidad`, motivo `f"Salida por orden de trabajo #{orden.id}"` y `orden_id`; la primera insuficiencia aborta el bloque y el UoW revierte todas las escrituras previas (C-11).
 
@@ -88,21 +88,21 @@ Dentro de `async with uow`: (1) `estados.get_by_codigo("PENDIENTE")` nulo → 40
 
 ### D7 — Transiciones
 
-Tabla única en el servicio: `iniciar: PENDIENTE → EN_REPARACION`, `terminar: EN_REPARACION → TERMINADA`, `cancelar: PENDIENTE → CANCELADA`. Cada transición, en un bloque: cambia `estado`, agrega la línea de historial (`desde`, `hasta`, `usuario_id` de quien actúa, `cuando` UTC) y, sólo en iniciar, asigna `mecanico_id`. Terminar no toca `mecanico_id` (DD-31). Mensajes 409 humanos por estado («La orden ya está terminada: no se puede cancelar.»).
+Tabla única en el servicio: `iniciar: PENDIENTE → EN_REPARACION`, `terminar: EN_REPARACION → TERMINADA`, `cancelar: PENDIENTE → CANCELADA`. Cada transición, en un bloque: valida el estado de origen (`_exigir_estado`) antes de la primera escritura y luego cambia `estado`, agrega la línea de historial (`desde`, `hasta`, `usuario_id` de quien actúa, `cuando` UTC) y, sólo en iniciar, asigna `mecanico_id` (`_registrar_transicion`, que además relee el detalle con la precarga declarada). En terminar, las salidas de stock van entre la validación del estado y `_registrar_transicion`, de modo que un 409 por estado nunca toca el stock. Terminar no toca `mecanico_id` (DD-31). Mensajes 409 humanos por estado («La orden ya está terminada: no se puede cancelar.»).
 
 ### D8 — Pruebas y entregables
 
-- `test/pytest/ordenes/` con su `conftest.py`, reutilizando la fixture `base_migrada` (Alembic real, DD-43) y las sesiones reales de `test/pytest/autorizacion/conftest.py` promovidas a un módulo compartido (sin duplicarlas). Se cargan los datos del seed o fixtures equivalentes para órdenes 1/2.
+- `test/pytest/ordenes/` con su `conftest.py`, reutilizando la fixture `base_migrada` (Alembic real, DD-43) y las sesiones reales de `test/pytest/autorizacion/conftest.py`, que `ordenes/conftest.py` importa sin duplicarlas (no se promovieron a un módulo compartido). Los datos de las órdenes 1/2 salen de `seed.py` real (fixtures `base_sembrada` y `api_sembrada`); los helpers de snapshot y alta (`instantanea`, `poner_estado`, `crear_orden`) viven en `test/pytest/ordenes/_apoyo.py`.
 - Pruebas de capas por inspección (sin `commit(` fuera del UoW base, servicios sin `execute`, catálogo sin escrituras) y pruebas de comportamiento con fallos inyectados (rollback de commit fallido, falla a mitad de terminación/registro/precio).
 - `test/ordenes.http` siguiendo D-3 y el formato de `test/autorizacion.http` (variables de contraseña por entorno, `# @name` + `# @no-cookie-jar` + `Cookie:`), orden de bloques: C-17 → C-10 → C-06 → iniciar → C-11 → C-12 → C-13.
 
-### Supuestos/decisiones nuevos a registrar en `knowledge-base/09_decisiones_y_supuestos.md` (D-4, al aplicar)
+### Supuestos/decisiones nuevos registrados en `knowledge-base/09_decisiones_y_supuestos.md` (D-4)
 
-1. **DD candidata** — contratos de D1 (forma del detalle = ejemplo de la consigna; transiciones devuelven 200 con el detalle; `/estados-orden` sin paginar).
-2. **DD candidata** — orden de controles de D2, predicado `puede_cancelar` separado de `es_personal_o_dueno`, y `requiere_rol("MECANICO","ADMIN")` en terminar.
-3. **SU candidato** — el mecánico asignado necesita el rol MECANICO vigente para terminar.
-4. **DD candidata** — guarda de stock en el punto único (`StockInsuficiente` → 409) y tope del total de la orden → 409 (extiende DD-41).
-5. **DD candidata** — `ItemOrdenRepository` e `HistorialEstadoOrdenRepository` (sólo agregado), reubicación de las consultas de órdenes a `OrdenRepository` y rollback del commit fallido en el UoW base.
+1. **DD-52** — contratos de D1 (forma del detalle = ejemplo de la consigna; transiciones devuelven 200 con el detalle; `/estados-orden` sin paginar).
+2. **DD-54** — orden de controles de D2, predicado `puede_cancelar` separado de `es_personal_o_dueno`, y `requiere_rol("MECANICO","ADMIN")` en terminar.
+3. **SU-15** — el mecánico asignado necesita el rol MECANICO vigente para terminar.
+4. **DD-53** — guarda de stock en el punto único (`StockInsuficiente` → 409) y tope del total de la orden → 409 (extiende DD-41).
+5. **DD-51** — `ItemOrdenRepository` e `HistorialEstadoOrdenRepository` (sólo agregado), reubicación de las consultas de órdenes a `OrdenRepository` y rollback del commit fallido en el UoW base.
 
 ## Risks / Trade-offs
 
