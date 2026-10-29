@@ -14,7 +14,7 @@ Ver `proposal.md` para motivación y alcance; los comportamientos los fijan los 
 | `repuestos/service.py::actualizar_repuesto` cambia precio y agrega la línea con `add_si_hubo_cambio` en el mismo `async with uow`; `test_atomicidad_bloques.py::test_falla_al_escribir_el_historial_no_deja_el_precio_nuevo` y C-18 en `test/repuestos.http` ya lo cubren | D8: RN-20 sin cambio de código; sólo se suma un bloque `.http` |
 | `usuarios/router.py::get_session_intentos` abre `request.app.state.fabrica_sesiones()`; el único otro lugar es `core/database.py::get_session`. Comentarios actuales: «otra sesión/transacción… Sus intentos confirmados sobreviven al rollback de la petición normal» y, en el servicio, «confirma en otra transacción/conexión incluso ante rechazo o rollback normal» | D5: el costo no está dicho con las palabras de la consigna («deja filas aunque la petición falle») ni se afirma que sea la única excepción → se reescriben los comentarios y se fija por prueba |
 | `service.iniciar_sesion` confirma el intento en los tres desenlaces (200, 401, 429) antes de devolver o lanzar; en el 429 confirma el intento **antes** del evento del UoW normal. `test/pytest/auth/test_intentos.py` y `test_login.py` ya prueban independencia, rollback y persistencia | D5: no se cambia el flujo; se agrega la prueba de C-05 que cuenta las seis filas desde otra sesión |
-| Acciones de `evento_seguridad` en el código: registro (`service.py:123`), cambio de contraseña (`:91`), 429 (`:148`), alta de personal (`:204`), rol asignado/revocado (`:248`, `:275`, con el **id** numérico como «Y»), datos iniciales (`seed.py:241`) | D7: coinciden con DD-26; la «Y» la fija un supuesto. `knowledge-base/04_modelo_de_datos.md` y RT-SE-10 no mencionan el evento del 429 que DD-26 y RT-EQ-06 sí incluyen → conciliar la KB |
+| Acciones de `evento_seguridad` en el código: registro (`service.py:122`), cambio de contraseña (`:90`), 429 (`:149`), alta de personal (`:208`), rol asignado/revocado (`:252`, `:279`, con el **id** numérico como «Y»), datos iniciales (`seed.py:240`) — líneas del archivo tras los comentarios del grupo 4 | D7: coinciden con DD-26; la «Y» la fija un supuesto. `knowledge-base/04_modelo_de_datos.md` y RT-SE-10 no mencionan el evento del 429 que DD-26 y RT-EQ-06 sí incluyen → conciliar la KB |
 
 ## Goals / Non-Goals
 
@@ -32,7 +32,7 @@ El change no escribe una migración nueva ni toca las dos existentes: T-6 asigna
 
 ### D2 — Forma de `test/solo_agregado.sql`
 
-- Encabezado con precondición (`python seed.py` antes), comandos de ejecución para venv (`psql -h ... -U ... -d ... -a -f test/solo_agregado.sql`) y Docker (`docker compose exec -T db psql -U ... -d ... -a < test/solo_agregado.sql`), sin credenciales (variables de entorno, S-6). `-a` hace que la salida muestre cada sentencia junto a su error: es la evidencia.
+- Encabezado con precondición (`python seed.py` antes), comandos de ejecución en tres formas —Docker Compose (`docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -a' < test/solo_agregado.sql`), contenedor de PostgreSQL sin compose (`docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c '...' < ...`) y `psql` en el host (`psql -h ... -U ... -d ... -a -f test/solo_agregado.sql`)—, sin credenciales (variables de entorno, S-6). Los tres comandos, `alembic` y `seed.py` trabajan sobre `POSTGRES_DB` (no `POSTGRES_TEST_DB`): para el flujo de test se apunta `POSTGRES_DB` a la base de test. `-a` hace que la salida muestre cada sentencia junto a su error: es la evidencia.
 - `\set ON_ERROR_STOP off` explícito y autocommit de `psql`: cada sentencia es su propia transacción, así un rechazo no aborta las siguientes.
 - Las seis sentencias apuntan a filas **existentes** del seed (`WHERE id = 1` en las tres tablas: historial de estado de la orden 1, movimiento «Stock inicial» del filtro, línea 8000 → 8500 del filtro) con cambios realistas (`SET hasta_estado = 'CANCELADA'`, `SET cantidad = 99`, `SET precio_nuevo = 1`). Un `UPDATE`/`DELETE` que no encuentra filas **no** dispara un trigger `FOR EACH ROW` y terminaría en «0 filas» sin rechazo: por eso la precondición y el `id` fijo.
 - Sentencia 7: `INSERT INTO orden_trabajo (vehiculo_id, estado, falla, creada_en, total) VALUES (1, 'INEXISTENTE', ..., now(), 0)` — todo válido salvo `estado`, de modo que sólo puede fallar la FK `orden_trabajo_estado_fkey` (el mensaje exacto depende del idioma del servidor; el comentario esperado cita el nombre de la restricción y el `SQLSTATE` 23503).
@@ -41,12 +41,12 @@ El change no escribe una migración nueva ni toca las dos existentes: T-6 asigna
 
 ### D3 — La suite ejecuta el mismo archivo
 
-`test/pytest/integridad/test_solo_agregado_sql.py` lee `test/solo_agregado.sql`, descarta líneas de comentario (`--`) y metacomandos de `psql` (`\`), separa por `;` de fin de sentencia y ejecuta cada una en su propia transacción sobre `base_migrada` sembrada con `seed.sembrar`. Afirma el `SQLSTATE` del error original: `23001` (restrict_violation) en las seis primeras y `23503` (foreign_key_violation) en la séptima, y que los conteos/valores no cambiaron. Así la evidencia manual y la automática no pueden divergir. Regla del archivo para que el parser simple alcance: sin `;` dentro de literales y una sentencia por bloque.
+`test/pytest/integridad/test_solo_agregado_sql.py` lee `test/solo_agregado.sql`, descarta líneas de comentario (`--`) y metacomandos de `psql` (`\`), separa por `;` de fin de sentencia y ejecuta cada una en su propia transacción sobre la base migrada y sembrada (fixture `base_sembrada` reutilizada de `ordenes/conftest.py`, que corre el `seed.py` real en un subproceso: mismo resultado que `seed.sembrar` sin duplicar la fixture); el nombre de la restricción se lee también de la excepción de asyncpg que envuelve la de SQLAlchemy (`__cause__`). Afirma el `SQLSTATE` del error original: `23001` (restrict_violation) en las seis primeras y `23503` (foreign_key_violation) en la séptima, y que los conteos/valores no cambiaron. Así la evidencia manual y la automática no pueden divergir. Regla del archivo para que el parser simple alcance: sin `;` dentro de literales y una sentencia por bloque.
 **Alternativa descartada**: invocar el binario `psql` desde pytest. Agrega una dependencia del cliente en la máquina/CI; la ejecución manual ya produce la evidencia visual.
 
 ### D4 — Evidencia guardada
 
-Se versiona la salida textual de `psql -a` en `docs/evidencias/C-14-solo-agregado.txt` (producida por el agente en el apply, contra la base de test sembrada). La **captura de pantalla** que pide la entrega la toma una persona al ejecutar el mismo comando; el README explica cómo y dónde guardarla. No se inventa una captura.
+Se versiona la salida textual de `psql -a` en `docs/evidencias/C-14-solo-agregado.txt` (producida por el agente en el apply, contra la base de test sembrada, con el comando del README para guardar a archivo: `stdbuf -o0` y `2>&1` dentro del `sh -c`, para que cada error quede junto a su sentencia). Al compararla con una corrida nueva se ignoran las líneas en blanco: `psql -a` imprime algunas que el archivo guardado no tiene (verificación independiente de 6.3); no es byte a byte. La **captura de pantalla** que pide la entrega la toma una persona al ejecutar el mismo comando; el README explica cómo y dónde guardarla. No se inventa una captura.
 
 ### D5 — `intento_acceso`: comentario exacto y prueba de exclusividad
 
@@ -61,7 +61,7 @@ La observación de la verificación de EJ-6 (DD-53) es que dos terminaciones **s
 
 ### D7 — `evento_seguridad` contra DD-26
 
-Las siete acciones coinciden en texto y actor. La «Y» de «Rol X asignado a Y» / «revocado a Y» es el **id numérico** del usuario (EJ-5, ya documentado en `test/autorizacion.http`); DD-26 no la fija. Se registra como supuesto y no se cambia: pasar al correo alteraría un contrato observable de EJ-5 y sus `.http`. La KB se concilia: `04_modelo_de_datos.md` (evento_seguridad) y RT-SE-10 suman el «Login bloqueado por demasiados intentos» que DD-26 y RT-EQ-06 ya incluyen.
+Las siete acciones coinciden en texto y actor (fijado por `test/pytest/integridad/test_eventos_seguridad_dd26.py`). La «Y» de «Rol X asignado a Y» / «revocado a Y» es el **id numérico** del usuario (EJ-5, ya documentado en `test/autorizacion.http`); DD-26 no la fija. Se registra como supuesto y no se cambia: pasar al correo alteraría un contrato observable de EJ-5 y sus `.http`. La KB se concilia: `04_modelo_de_datos.md` (evento_seguridad) y RT-SE-10 suman el «Login bloqueado por demasiados intentos» que DD-26 y RT-EQ-06 ya incluyen.
 
 ### D8 — RN-15 en la capa de aplicación y RN-20 sin cambios
 
@@ -75,7 +75,7 @@ Prueba de inspección: los repositorios de las tres tablas de sólo agregado no 
 | Comentario de excepción y costo | **RED** (frases ausentes) | — |
 | Repositorios de sólo agregado sin `update`/`delete` | Caracterización (verde) | Detector sobre una clase temporal con `update` → falla |
 | Fábrica de sesiones sólo en dos lugares | Caracterización (verde) | Detector sobre un archivo temporal con una tercera llamada → falla |
-| C-05 cuenta seis filas | Caracterización (verde) | Afirmar primero una cantidad equivocada no vale; se registra como caracterización con evidencia del run |
+| C-05 cuenta seis filas | Caracterización (verde) | Afirmar primero una cantidad equivocada no vale; se registra como caracterización con evidencia del run. Sensibilidad observada: una mutación temporal de `service.py` (`exito=exito` → `exito=True`) hizo fallar las dos pruebas; revertida |
 | Filas de la API rechazadas / `downgrade -1` | Caracterización (verde) | En `downgrade -1` la afirmación «UPDATE ya no rechazado» es la contraparte: si el trigger quedara, falla |
 
 Cuando el comportamiento ya existe, no se fabrica un RED: se declara la excepción en el documento ODD con el run observado y la prueba de sensibilidad. Las costuras (seams) a probar son las de la tabla; se confirman con el usuario junto con la aprobación del plan (governance CRITICO).

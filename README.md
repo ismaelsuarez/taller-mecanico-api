@@ -157,7 +157,7 @@ El servicio cierra las lecturas cortas con UoW antes de bcrypt real/ficticio y c
 
 `test_identidad.py`/`test_logout.py` verifican HTTP ASGI y PostgreSQL/Alembic reales: claims, estado actual, frontera ±1 microsegundo, roles cambiados, eliminación y ausencia de escrituras. Focalizadas T5 + expectativa OpenAPI previa: **33 aprobadas, 0 omitidas**. La suite completa y la ejecución host solicitada por el verificador independiente dieron **563 aprobadas, 0 omitidas y 76 advertencias conocidas** de la clave JWT de fixture. Los **22 bloques TCP** pasaron tras Alembic/seed en bases aisladas. El diferencial contra `9cb3f16` conservó 15 solicitudes por versión a los tres consumidores de `actor_temporal`, con códigos, cuerpos, encabezados y efectos auditados equivalentes. Sólo normaliza fechas previamente validadas; compara stderr bajo el mismo formato sin frames de traceback. El dictamen independiente cubre T5, no cambio de contraseña, EJ-5 ni cierre global de EJ-4.
 
-`test/auth.http` conserva C-01/C-03 y yo/logout junto con C-02/C-04/C-05 y C-09 parcial (28 bloques en total). Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
+`test/auth.http` conserva C-01/C-03 y yo/logout junto con C-02/C-04/C-05 y C-09 parcial (29 peticiones en total desde EJ-5, que sumó el login de ADMIN de C-01; EJ-7 agrega además, tras el sexto intento de C-05, un bloque de verificación con la consulta `psql` que no es una petición HTTP). Para el bloque Bearer, copiá sólo el JWT de `loginCliente` a la variable local `TOKEN_SOLO_BEARER`, nunca al archivo. Las otras sesiones usan cookies nombradas y `# @no-cookie-jar`; el bloque posterior al logout omite deliberadamente toda cookie.
 
 ### Cambio de contraseña (OPSX 6.1–6.3)
 
@@ -171,7 +171,7 @@ La lectura termina antes de verificar/calcular bcrypt (hilo y semáforo existent
 
 **Evidencia funcional:** RED HTTP 404 del implementador; verificación final focalizada de cambio + registro: 45 aprobadas sin omisiones, incluidas las aserciones de rollback. La ejecución host preparada por el verificador independiente aprobó **595 pruebas, 0 omitidas y 132 advertencias conocidas de clave JWT de fixture**, más los **28 bloques TCP** sobre PostgreSQL migrada/seed aislados. El diferencial contra `c36b50e` aprobó 48 solicitudes por versión a registro/login, con Secure activado/desactivado y comparación de exit/stdout/stderr; sólo normaliza sales bcrypt verificadas, fechas conscientes de zona y JWT/tiempos previamente validados. El dictamen independiente aprueba 6.1–6.3, sin atribuirle el RED histórico ni una revisión nativa.
 
-**C-09 parcial ejecutado por TCP:** `test/auth.http` conserva los 22 bloques anteriores y agrega seis (28 total). Definí `PASSWORD_PENDIENTE` con la contraseña de `nuevo@example.com` del seed y `PASSWORD_NUEVA` distinta, efímera y de hasta 72 bytes; nunca las guardes en el archivo. Usa una cuenta distinta de la bloqueada por C-05, cookies nombradas y sin cookie jar. Al terminar se esperan 12 intentos (9 fallidos/3 exitosos) y cuatro eventos incluido seed. El bloqueo global **403** y el RBAC completan C-09 en EJ-5 (ver sección siguiente); el archivo `test/autorizacion.http` los demuestra.
+**C-09 parcial ejecutado por TCP:** `test/auth.http` conserva los 22 bloques anteriores y agrega seis (28 en EJ-4; 29 desde EJ-5 por el login de ADMIN de C-01). Definí `PASSWORD_PENDIENTE` con la contraseña de `nuevo@example.com` del seed y `PASSWORD_NUEVA` distinta, efímera y de hasta 72 bytes; nunca las guardes en el archivo. Usa una cuenta distinta de la bloqueada por C-05, cookies nombradas y sin cookie jar. Al terminar se esperan 13 intentos (9 fallidos/4 exitosos; 12 y 9/3 antes del login de ADMIN de C-01 de EJ-5) y cuatro eventos incluido seed. El bloqueo global **403** y el RBAC completan C-09 en EJ-5 (ver sección siguiente); el archivo `test/autorizacion.http` los demuestra.
 
 ## Autorización por roles (EJ-5)
 
@@ -204,7 +204,7 @@ El helper `es_personal_o_dueno` (`app/modules/ordenes/service.py`) decide el 403
 
 **Precondición:** `alembic upgrade head` y `python seed.py` antes; los dos y el `psql` de abajo trabajan sobre la base `POSTGRES_DB` (apuntá a la base de test, p. ej. `export POSTGRES_DB="$POSTGRES_TEST_DB"`, antes de los tres). Las sentencias apuntan a la fila `id = 1` del seed; sobre una base vacía no se rechazaría nada (un disparador por fila no actúa si no hay filas) y no sería evidencia.
 
-Elegí la forma que corresponda a tu entorno (las tres corren el mismo archivo):
+Elegí la forma que corresponda a tu entorno (las tres corren el mismo archivo): las formas 1 y 2 y el guardado a archivo se ejecutaron tal como están escritas al cerrar EJ-7; la forma 3 usa el mismo `psql` pero **no se pudo ejecutar** en la máquina de desarrollo (no tenía cliente `psql` instalado), así que no está verificada.
 
 ```bash
 # 1. Docker Compose del equipo (el servicio db ya tiene las variables del .env):
@@ -225,7 +225,7 @@ docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c 'stdbuf -o0 psql -U "$POSTG
 
 - **Resultado esperado:** seis `ERROR: La tabla … es de sólo agregado: no se puede modificar ni borrar.`, un `violates foreign key constraint "orden_trabajo_estado_fkey"` y un último `SELECT` con las cantidades sin cambios (`3 | 4 | 1 | 2` tras el seed).
 - **Captura para la entrega:** ejecutá el comando en una terminal y sacá la captura de pantalla con los siete errores y el `SELECT` final a la vista; no se genera automáticamente.
-- **Evidencia textual de referencia:** `docs/evidencias/C-14-solo-agregado.txt` (la salida de `psql -a` sobre la base de test recién sembrada: siete `ERROR` y los conteos `3 | 4 | 1 | 2`). Se regenera con el último comando de arriba.
+- **Evidencia textual de referencia:** `docs/evidencias/C-14-solo-agregado.txt` (la salida de `psql -a` sobre la base de test recién sembrada: siete `ERROR` y los conteos `3 | 4 | 1 | 2`). Se regenera con el último comando de arriba (al comparar con una corrida nueva, ignorá las líneas en blanco: `psql -a` imprime algunas que el archivo guardado no tiene; el resto es idéntico).
 - **Automática:** `test/pytest/integridad/test_solo_agregado_sql.py` ejecuta **las mismas sentencias** de ese archivo sobre la base de test migrada y sembrada, y verifica los códigos `23001` y `23503`; así la evidencia manual y la de la suite no pueden divergir.
 - **Límites aceptados:** `TRUNCATE` (que usa `seed.py`) y un superusuario con `session_replication_role = replica` esquivan el disparador por fila (SU-16).
 
