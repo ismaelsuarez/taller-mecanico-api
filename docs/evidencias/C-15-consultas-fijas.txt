@@ -1,0 +1,100 @@
+# C-15 / EJ-8 — Número fijo de consultas en el detalle de una orden (RT-TX-06)
+# ============================================================================
+# Qué demuestra: el detalle de una orden usa el MISMO número de consultas
+# independientemente de cuántos ítems tenga. La orden 1 del seed tiene 2 ítems
+# y la orden creada por el bloque C-15 de test/ordenes.http tiene 4 ítems:
+# los dos GET /ordenes/{id} ejecutan exactamente 5 consultas cada uno
+# (usuario, asignacion_rol, orden con vehiculo y cliente, items con repuestos,
+# historial de estados) — la carga anticipada evita una consulta por ítem.
+#
+# CÓMO PRODUCIR ESTA EVIDENCIA:
+#   1. Migrar y sembrar:  alembic upgrade head && python seed.py
+#   2. Arrancar la API con las consultas visibles en la consola:
+#        set SQL_ECHO=true   (o SQL_ECHO=true uvicorn main:app --port 8000)
+#   3. Con la extensión REST Client sobre test/ordenes.http: correr primero el
+#      bloque de login de recepción (o C-10) y después el bloque C-15, que crea
+#      la orden de 4 ítems y pide ambas. Guardar el fragmento de consola.
+#   4. Verificar: entre el BEGIN y el COMMIT de cada GET aparecen 5 SELECT,
+#      los mismos en la orden de 2 ítems que en la de 4.
+#
+# La misma aserción, en automático, la hace
+# test/pytest/asincronia/test_consultas_fijas.py (conteo exacto por sesión propia).
+#
+# Nota sobre el id: el de la orden de 4 ítems depende del estado del seed
+# (en una base recién sembrada es la 3; en el recorrido completo de
+# test/ordenes.http es la 4, porque C-10 ya dio de alta otra orden).
+#
+# EVIDENCIA DE ENTREGA: la captura de pantalla de esa consola es la evidencia
+# C-15. La salida textual de referencia está en este archivo.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 1) GET /ordenes/1 — orden del seed con 2 ítems (recepción, sesión iniciada)
+#    5 SELECT: usuario, asignacion_rol, orden+vehiculo+cliente, items+repuestos,
+#    historial. Las relaciones se precargan en el repositorio (sin N+1).
+# ---------------------------------------------------------------------------
+2026-10-29 23:45:50,027 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-29 23:45:50,027 INFO sqlalchemy.engine.Engine SELECT usuario.id, usuario.email, usuario.nombre, usuario.password_hash, usuario.activo, usuario.debe_cambiar_password, usuario.password_cambiada_en
+FROM usuario
+WHERE usuario.id = $1::INTEGER
+2026-10-29 23:45:50,027 INFO sqlalchemy.engine.Engine [cached since 0.09242s ago] (3,)
+2026-10-29 23:45:50,029 INFO sqlalchemy.engine.Engine SELECT asignacion_rol.usuario_id, asignacion_rol.id, asignacion_rol.rol, asignacion_rol.desde, asignacion_rol.vence_en, asignacion_rol.revocada_en, asignacion_rol.otorgada_por
+FROM asignacion_rol
+WHERE asignacion_rol.usuario_id IN ($1::INTEGER)
+2026-10-29 23:45:50,030 INFO sqlalchemy.engine.Engine [cached since 0.3802s ago] (3,)
+2026-10-29 23:45:50,031 INFO sqlalchemy.engine.Engine COMMIT
+2026-10-29 23:45:50,035 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-29 23:45:50,035 INFO sqlalchemy.engine.Engine SELECT orden_trabajo.id, orden_trabajo.vehiculo_id, orden_trabajo.mecanico_id, orden_trabajo.estado, orden_trabajo.falla, orden_trabajo.creada_en, orden_trabajo.total, cliente_1.id AS id_1, cliente_1.usuario_id, cliente_1.nombre, cliente_1.documento, cliente_1.telefono, vehiculo_1.id AS id_2, vehiculo_1.cliente_id, vehiculo_1.patente, vehiculo_1.marca, vehiculo_1.modelo, vehiculo_1.anio, vehiculo_1.borrado_en
+FROM orden_trabajo LEFT OUTER JOIN vehiculo AS vehiculo_1 ON vehiculo_1.id = orden_trabajo.vehiculo_id LEFT OUTER JOIN cliente AS cliente_1 ON cliente_1.id = vehiculo_1.cliente_id
+WHERE orden_trabajo.id = $1::INTEGER
+2026-10-29 23:45:50,035 INFO sqlalchemy.engine.Engine [cached since 0.0364s ago] (1,)
+2026-10-29 23:45:50,038 INFO sqlalchemy.engine.Engine SELECT item_orden.orden_id, item_orden.id, item_orden.repuesto_id, item_orden.cantidad, item_orden.precio_unitario, repuesto_1.id, repuesto_1.codigo, repuesto_1.descripcion, repuesto_1.precio, repuesto_1.stock, repuesto_1.borrado_en
+FROM item_orden LEFT OUTER JOIN repuesto AS repuesto_1 ON repuesto_1.id = item_orden.repuesto_id
+WHERE item_orden.orden_id IN ($1::INTEGER)
+2026-10-29 23:45:50,038 INFO sqlalchemy.engine.Engine [cached since 0.03285s ago] (1,)
+2026-10-29 23:45:50,041 INFO sqlalchemy.engine.Engine SELECT historial_estado_orden.orden_id, historial_estado_orden.id, historial_estado_orden.desde_estado, historial_estado_orden.hasta_estado, historial_estado_orden.usuario_id, historial_estado_orden.cuando
+FROM historial_estado_orden
+WHERE historial_estado_orden.orden_id IN ($1::INTEGER)
+2026-10-29 23:45:50,041 INFO sqlalchemy.engine.Engine [cached since 0.03041s ago] (1,)
+2026-10-29 23:45:50,043 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:9895 - "GET /ordenes/1 HTTP/1.1" 200 OK
+
+# ---------------------------------------------------------------------------
+# 2) GET /ordenes/3 — orden creada por el bloque C-15 con 4 ítems distintos
+#    Mismas 5 consultas que arriba: las relaciones vienen precargadas en la
+#    misma SELECT (JOINs), no una por ítem.
+# ---------------------------------------------------------------------------
+2026-10-29 23:45:50,049 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-29 23:45:50,049 INFO sqlalchemy.engine.Engine SELECT usuario.id, usuario.email, usuario.nombre, usuario.password_hash, usuario.activo, usuario.debe_cambiar_password, usuario.password_cambiada_en
+FROM usuario
+WHERE usuario.id = $1::INTEGER
+2026-10-29 23:45:50,049 INFO sqlalchemy.engine.Engine [cached since 0.1145s ago] (3,)
+2026-10-29 23:45:50,051 INFO sqlalchemy.engine.Engine SELECT asignacion_rol.usuario_id, asignacion_rol.id, asignacion_rol.rol, asignacion_rol.desde, asignacion_rol.vence_en, asignacion_rol.revocada_en, asignacion_rol.otorgada_por
+FROM asignacion_rol
+WHERE asignacion_rol.usuario_id IN ($1::INTEGER)
+2026-10-29 23:45:50,051 INFO sqlalchemy.engine.Engine [cached since 0.4019s ago] (3,)
+2026-10-29 23:45:50,052 INFO sqlalchemy.engine.Engine COMMIT
+2026-10-29 23:45:50,056 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-29 23:45:50,056 INFO sqlalchemy.engine.Engine SELECT orden_trabajo.id, orden_trabajo.vehiculo_id, orden_trabajo.mecanico_id, orden_trabajo.estado, orden_trabajo.falla, orden_trabajo.creada_en, orden_trabajo.total, cliente_1.id AS id_1, cliente_1.usuario_id, cliente_1.nombre, cliente_1.documento, cliente_1.telefono, vehiculo_1.id AS id_2, vehiculo_1.cliente_id, vehiculo_1.patente, vehiculo_1.marca, vehiculo_1.modelo, vehiculo_1.anio, vehiculo_1.borrado_en
+FROM orden_trabajo LEFT OUTER JOIN vehiculo AS vehiculo_1 ON vehiculo_1.id = orden_trabajo.vehiculo_id LEFT OUTER JOIN cliente AS cliente_1 ON cliente_1.id = vehiculo_1.cliente_id
+WHERE orden_trabajo.id = $1::INTEGER
+2026-10-29 23:45:50,056 INFO sqlalchemy.engine.Engine [cached since 0.05784s ago] (3,)
+2026-10-29 23:45:50,059 INFO sqlalchemy.engine.Engine SELECT item_orden.orden_id, item_orden.id, item_orden.repuesto_id, item_orden.cantidad, item_orden.precio_unitario, repuesto_1.id, repuesto_1.codigo, repuesto_1.descripcion, repuesto_1.precio, repuesto_1.stock, repuesto_1.borrado_en
+FROM item_orden LEFT OUTER JOIN repuesto AS repuesto_1 ON repuesto_1.id = item_orden.repuesto_id
+WHERE item_orden.orden_id IN ($1::INTEGER)
+2026-10-29 23:45:50,059 INFO sqlalchemy.engine.Engine [cached since 0.05313s ago] (3,)
+2026-10-29 23:45:50,060 INFO sqlalchemy.engine.Engine SELECT historial_estado_orden.orden_id, historial_estado_orden.id, historial_estado_orden.desde_estado, historial_estado_orden.hasta_estado, historial_estado_orden.usuario_id, historial_estado_orden.cuando
+FROM historial_estado_orden
+WHERE historial_estado_orden.orden_id IN ($1::INTEGER)
+2026-10-29 23:45:50,060 INFO sqlalchemy.engine.Engine [cached since 0.04951s ago] (3,)
+2026-10-29 23:45:50,061 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:9895 - "GET /ordenes/3 HTTP/1.1" 200 OK
+
+# ---------------------------------------------------------------------------
+# 3) Cotejo
+#    Orden con 2 ítems: 5 SELECT (más BEGIN/COMMIT de la sesión y del UoW).
+#    Orden con 4 ítems: 5 SELECT (idénticos, salvo los parámetros ligados).
+#    Ninguna consulta crece con la cantidad de ítems: RT-TX-06 satisfecha.
+#    La sensibilidad del detector (una consulta extra por ítem) está en
+#    test/pytest/asincronia/test_consultas_fijas.py::el_detector_detecta_n_mas_uno.
+# ---------------------------------------------------------------------------

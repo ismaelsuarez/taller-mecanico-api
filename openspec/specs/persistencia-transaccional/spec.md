@@ -41,6 +41,10 @@ Cada entidad leída o escrita por un módulo MUST tener su repositorio, con mét
 - **WHEN** se inspeccionan los `service.py` y `router.py` de los módulos con datos
 - **THEN** ninguno ejecuta `execute` ni construye consultas sobre la sesión: todas viven en repositorios
 
+#### Scenario: Ninguna respuesta consulta por fila
+- **WHEN** se piden los listados y los detalles que traen relaciones (por ejemplo `GET /ordenes`, `GET /clientes` y `GET /ordenes/{id}`) con la base registrando las consultas
+- **THEN** la cantidad de consultas no crece con la cantidad de filas ni con la de ítems devueltos
+
 ### Requirement: Catálogo con repositorio de sólo lectura
 
 El catálogo `estado_orden` MUST tener un repositorio propio que NO hereda de `BaseRepository` (su clave primaria es `codigo`, no `id`) y que sólo ofrece lecturas: listar por posición y obtener por código. MUST NOT ofrecer `add`, `update` ni `delete`.
@@ -124,3 +128,19 @@ El acceso desde la aplicación a `historial_estado_orden`, `movimiento_stock` e 
 #### Scenario: El alta sigue funcionando dentro de su bloque
 - **WHEN** una operación de varias escrituras (cambio de precio, reposición o transición de una orden) agrega su línea de auditoría
 - **THEN** la línea queda escrita en la misma transacción que el cambio que registra y se revierte con él si el bloque falla
+
+### Requirement: Detalle de una orden con número fijo de consultas
+
+El detalle de una orden (`GET /ordenes/{id}` y el método de repositorio que lo trae) MUST resolverse con un **número fijo de consultas** que no crece con la cantidad de ítems ni con la cantidad de líneas de historial (RT-TX-06, C-15): la orden, su vehículo, su cliente, sus ítems con su repuesto y su historial se piden en consultas contadas, declaradas en el repositorio, sin ninguna consulta adicional por fila.
+
+#### Scenario: Mismo número de consultas con 2 y con 4 ítems (C-15)
+- **WHEN** con `SQL_ECHO=true` se pide el detalle de una orden de 2 ítems y el de otra de 4 ítems
+- **THEN** ambas respuestas se resuelven con exactamente la misma cantidad de consultas
+
+#### Scenario: Una consulta por relación, no por fila
+- **WHEN** una orden tiene ítems de muchos repuestos distintos y varias líneas de historial
+- **THEN** el número de consultas no aumenta por cada ítem ni por cada línea: se repiten las mismas consultas iniciales de cualquier orden
+
+#### Scenario: La evidencia queda guardada
+- **WHEN** se revisa la entrega del proyecto
+- **THEN** el repositorio contiene el fragmento de consola con las consultas del detalle de una orden de 2 ítems y de otra de 4 ítems, producido con `SQL_ECHO=true`

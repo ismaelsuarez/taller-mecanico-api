@@ -8,12 +8,13 @@ permiso del detalle depende de la orden y lo decide el servicio (D2).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from app.core.database import SesionDep
 from app.core.dependencies import UsuarioActualDep, requiere_rol
 from app.core.paginacion import Pagina, ParametrosPagina
 from app.modules.ordenes import service
+from app.modules.ordenes.avisos import avisar_cliente
 from app.modules.ordenes.schemas import (
     EstadoOrdenLectura,
     OrdenCrear,
@@ -130,6 +131,11 @@ async def terminar_orden(
     orden_id: int,
     uow: UowOrdenDep,
     identidad: UsuarioActualDep,
+    background_tasks: BackgroundTasks,
 ) -> OrdenDetalle:
     """El rol lo pide la ruta; que sea el asignado (o un ADMIN) lo decide el servicio con la orden."""
-    return await service.terminar_orden(uow, identidad, orden_id)
+    detalle = await service.terminar_orden(uow, identidad, orden_id)
+    # Sólo si el servicio devolvió: un 404, 403 o 409 sale por excepción antes de esta línea (T-9).
+    # Starlette ejecuta la tarea recién después de enviar la respuesta (RT-TX-07).
+    background_tasks.add_task(avisar_cliente, orden_id, detalle.cliente)
+    return detalle

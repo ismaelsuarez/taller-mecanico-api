@@ -226,11 +226,11 @@ Organizadas por **épica** (≈ ejercicio de la consigna) y luego por **historia
 ## Épica 8: Lecturas sin N+1 y asincronía (Ej. 8 · 8 pts)
 
 ### US-023 — Carga anticipada
-- [ ] Toda respuesta con datos de relaciones usa carga anticipada declarada en el repositorio; nada depende de la carga perezosa.
-- [ ] El detalle de una orden usa un número fijo de consultas (mismo número con 2 y con 4 ítems).
+- [x] Toda respuesta con datos de relaciones usa carga anticipada declarada en el repositorio; nada depende de la carga perezosa. (EJ-8: auditoría fijada por `test/pytest/asincronia/test_carga_anticipada.py` — sin SQL directo en servicios/routers y precarga declarada en los métodos que serializan relaciones; sin hallazgos.)
+- [x] El detalle de una orden usa un número fijo de consultas (mismo número con 2 y con 4 ítems). (EJ-8: `test/pytest/asincronia/test_consultas_fijas.py` — 2 vs 4 ítems y más historial, mismos conteos; evidencia en `docs/evidencias/C-15-consultas-fijas.txt`.)
 
 ### US-024 — Aviso en segundo plano
-- [ ] Al terminar una orden se agenda con `BackgroundTasks` el aviso: `await asyncio.sleep(0.5)` + mensaje en el registro; corre después de la respuesta y sólo si se confirmó.
-- [ ] Todos los handlers `async def`, sin llamadas bloqueantes.
+- [x] Al terminar una orden se agenda con `BackgroundTasks` el aviso: `await asyncio.sleep(0.5)` + mensaje en el registro; corre después de la respuesta y sólo si se confirmó. (EJ-8: `app/modules/ordenes/avisos.py` + router (D1); DD-07/DD-56; `test/pytest/asincronia/test_aviso_terminar.py` — C-12 con el instante posterior a la respuesta, 409/404 sin aviso y sensibilidad del detector.)
+- [x] Todos los handlers `async def`, sin llamadas bloqueantes. (EJ-8: detector AST en `test/pytest/asincronia/test_handlers_async.py`; bcrypt fuera del bucle desde EJ-4, reafirmado con `test/pytest/auth/test_bcrypt.py`.)
 
 **Reglas relacionadas**: RT-TX-05..07

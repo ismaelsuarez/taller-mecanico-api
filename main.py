@@ -1,5 +1,6 @@
 """Aplicación, lifespan y los dos grupos de rutas."""
 
+import logging
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,9 +20,26 @@ from app.modules.usuarios.router import router as router_auth
 from app.modules.usuarios.router import router_administracion
 
 
+def configurar_registro_app() -> None:
+    """Los registros de `app.*` van a stderr con nivel INFO (C-12: el aviso debe verse en consola).
+
+    uvicorn sólo configura sus propios loggers; sin esto, `app.*` hereda el nivel WARNING de la raíz
+    y un `logger.info` se descarta antes de llegar a ningún handler. Idempotente: si `app` ya tiene
+    handlers (p. ej. una segunda arrancada en el mismo proceso), no se duplica ninguno.
+    """
+    registro_app = logging.getLogger("app")
+    if registro_app.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    registro_app.addHandler(handler)
+    registro_app.setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = obtener_settings()
+    configurar_registro_app()
     motor = crear_motor(settings)
     # El motor se libera también si el arranque falla o se cancela después de crearlo.
     try:

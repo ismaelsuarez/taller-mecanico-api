@@ -75,10 +75,10 @@ Así un mismo archivo puede tener la sesión del administrador y la de la recepc
 
 ### Checklist de entrega
 
-- [ ] `.env` en `.gitignore`; `env.example` sin secretos
-- [ ] `alembic upgrade head` → `downgrade base` → `upgrade head` sobre base vacía
-- [ ] `python seed.py` deja el estado inicial
-- [ ] `test/*.http` con C-01..C-19 y respuestas esperadas en comentarios
-- [ ] `test/solo_agregado.sql`
-- [ ] Captura C-14 (psql) y C-15 (consola con SQL)
-- [ ] README con los pasos desde cero
+- [x] `.env` en `.gitignore`; `env.example` sin secretos
+- [x] `alembic upgrade head` → `downgrade base` → `upgrade head` sobre base vacía
+- [x] `python seed.py` deja el estado inicial
+- [x] `test/*.http` con C-01..C-19 y respuestas esperadas en comentarios
+- [x] `test/solo_agregado.sql`
+- [x] Captura C-14 (psql) y C-15 (consola con SQL)
+- [x] README con los pasos desde cero

@@ -36,6 +36,7 @@
 
 ### DD-07 — Aviso al cliente con `BackgroundTasks`
 **Decisión**: tarea en el mismo proceso, después de la respuesta, sólo si se confirmó.
+**Confirmación EJ-8**: la tarea es `app/modules/ordenes/avisos.py::avisar_cliente` (`await asyncio.sleep(0.5)` + mensaje en el registro) y se agenda desde el **router** de `POST /ordenes/{id}/terminar`, después del `await` del servicio (T-9): los 404/403/409 salen por excepción y nunca llegan al `add_task`.
 **Trade-offs aceptados**: si el proceso se reinicia, el aviso se pierde y no hay reintento (se resuelve en cap. 8).
 
 ### DD-08 — Sin control de concurrencia en el stock
@@ -331,6 +332,20 @@ La identidad se resuelve primero: sin sesión siempre hay 401, nunca un 403 por 
 5. **Cómo se corre**: el README y el encabezado del SQL dan tres formas (Docker Compose, contenedor de PostgreSQL sin compose y `psql` en el host); las tres, `alembic` y `seed.py` trabajan sobre `POSTGRES_DB`, no `POSTGRES_TEST_DB`, así que para el flujo de test se apunta `POSTGRES_DB` a la base de test. Las dos formas con Docker y el guardado a archivo se ejecutaron tal como están escritos; la forma con `psql` en el host **no se pudo ejecutar** al cerrar EJ-7 (la máquina de desarrollo no tenía cliente `psql`) y queda sin verificar. Al comparar una corrida nueva con `docs/evidencias/C-14-solo-agregado.txt` se ignoran las líneas en blanco que imprime `psql -a`; la salida no es idéntica byte a byte.
 **Origen**: consigna Ej. 7 (C-14, secciones 6.8.1 y 6.9), RN-15, RN-19, T-6, DD-06. **Riesgo**: bajo (sólo pruebas y evidencia).
 
+### DD-56 — Aviso en segundo plano: unidad, logger y registro en consola (EJ-8, D1/D2)
+**Decisión**, de [D1-D2](../openspec/changes/08-lecturas-sin-n1-asincronia/design.md):
+1. **El aviso se agenda en el router, después del `await` del servicio**: `terminar_orden` recibe `BackgroundTasks` y ejecuta `background_tasks.add_task(avisar_cliente, orden_id, detalle.cliente)` sólo cuando el servicio devolvió. «Sólo si se confirmó» cae de la estructura (404/403/409 salen por excepción antes de la línea) y «después de enviar la respuesta» es de Starlette. El servicio sigue sin conocer `BackgroundTasks` (T-9, RT-TX-02).
+2. **Unidad `app/modules/ordenes/avisos.py`**: `avisar_cliente(orden_id, cliente)` recibe **datos planos**, espera `await asyncio.sleep(0.5)` y registra «Aviso al cliente %s: la orden #%s terminó y ya puede retirar el vehículo.» en `logging.getLogger("app.ordenes.avisos")` (misma convención que `app.salud`); **no abre sesión ni toca la base**.
+3. **Hallazgo de implementación (registrado antes de escribirse)**: con sólo `logger.info`, el aviso **no salía en la consola de uvicorn** (uvicorn sólo configura sus propios loggers y `app.*` hereda el nivel WARNING de la raíz). `main.py` suma `configurar_registro_app()` desde el `lifespan`: handler propio de `app.*` a stderr con nivel INFO, sólo si `app` todavía no tiene handlers (idempotente). Descartado: subir el aviso a `warning` (ensuciaría warnings reales) y `logging.basicConfig` a nivel INFO (subiría urllib3/sqlalchemy).
+4. **Sensibilidad del «sólo si se confirmó»**: `test/pytest/asincronia/test_aviso_terminar.py` verifica que el 409 y el 404 no dejan aviso, y un test de sensibilidad (servicio que avisa antes de delegar, con `monkeypatch`) demuestra que el detector vería el aviso de un código malo. Observación de la auditoría: un `add_task` colocado antes del `await` tampoco produciría aviso con un 409, porque FastAPI descarta las tareas de fondo cuando el handler lanza excepción (el «sólo si se confirmó» tiene doble garantía: la estructura y el framework).
+**Origen**: consigna Ej. 8 (US-024), RT-TX-07, T-9, DD-07. **Riesgo**: bajo.
+
+### DD-57 — Medición del número fijo de consultas (EJ-8, D3)
+**Decisión**, de [D3](../openspec/changes/08-lecturas-sin-n1-asincronia/design.md): dos medidas complementarias.
+1. **Prueba automática** (`test/pytest/asincronia/test_consultas_fijas.py`): contador con el evento `before_cursor_execute` sobre `motor.sync_engine` alrededor de `OrdenRepository.get_detalle_con_items_e_historial`, con una sesión propia por medición (sin ruido de login ni pool), para una orden de 2 ítems, otra de 4 y otra con más líneas de historial; aserción de igualdad de los tres conteos. Sensibilidad: réplica del método con una consulta extra por ítem crece exactamente en una por ítem.
+2. **Evidencia C-15** (`docs/evidencias/C-15-consultas-fijas.txt`): `SQL_ECHO=true` (DD-30), API levantada sobre base migrada y sembrada, dos `GET /ordenes/{id}` por HTTP (orden 1 del seed con 2 ítems y orden creada con 4) y el fragmento de consola guardado, con el mismo número de consultas en ambos. El README explica cómo producirla; la captura de pantalla de la entrega la toma una persona con ese comando.
+**Origen**: consigna Ej. 8 (US-023, C-15), RT-TX-06, T-10. **Riesgo**: bajo (pruebas y evidencia; no toca el esquema).
+
 ## Supuestos inferidos
 
 ### SU-01 — FKs de `usuario_id` en historiales y movimientos
@@ -395,4 +410,8 @@ Confirmado por DD-23.
 ### SU-18 — En «Rol X asignado/revocado a Y», «Y» es el id numérico del usuario
 **Supuesto** (EJ-7, D7): DD-26 fija el texto «Rol X asignado a Y» / «Rol X revocado a Y» y el actor (el admin), pero no qué es «Y». Se mantiene el **id numérico** del usuario afectado (el contrato de EJ-5, ya reflejado en `test/autorizacion.http`), no su correo: pasar al correo cambiaría un contrato observable y sus `.http`. La auditoría de EJ-7 comprobó las siete acciones de DD-26 y sus actores contra el código y el seed (`app/modules/usuarios/service.py`: registro, cambio de contraseña, bloqueo 429, alta de personal, rol asignado y rol revocado; `seed.py`: «Carga de los datos iniciales», actor `SISTEMA`) y no encontró otra diferencia. Fijado por `test/pytest/integridad/test_eventos_seguridad_dd26.py`.
 **Origen**: DD-26, RN-03, consigna Ej. 7. **Riesgo**: bajo. Si el usuario prefiere el correo, es un cambio de EJ-5/EJ-7 con sus pruebas y `.http`.
+
+### SU-19 — La orden de 4 ítems de C-15 no existe en el seed y se crea por la API
+**Supuesto** (EJ-8, D3): el seed sólo deja órdenes de 2 ítems (orden 1) y de 1 ítem con cantidad 4 (orden 2); ninguna tiene 4 **ítems** distintos. Para medir «el mismo número de consultas con 2 y con 4 ítems» (C-15), la orden de 4 ítems se crea en `test/ordenes.http` (bloque C-15, con los cuatro repuestos del seed) y en pytest con `Datos.orden(items=(...))`. `seed.py` **no se toca**: su estado inicial es contrato de EJ-2.
+**Origen**: consigna Ej. 8 (C-15), DD-15, DD-16. **Riesgo**: bajo. Fijado por `test/pytest/asincronia/test_consultas_fijas.py`.
 

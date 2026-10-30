@@ -316,7 +316,7 @@ El equipo decide quién toma cada turno; la tabla fija el orden y el peso de cad
   - `knowledge-base/11_casos_de_prueba_y_entrega.md` (C-14, evidencia de entrega)
 
 ### [EJ-8] `08-lecturas-sin-n1-asincronia`
-- **Estado**: `[ ]` pendiente
+- **Estado**: `[x]` completado y archivado (2026-10-30; 1067 tests + 2 fallos ambientales conocidos de Windows/loopback; C-15 completo con evidencia en `docs/evidencias/C-15-consultas-fijas.txt`, C-12 completo con el aviso en el registro, entrega cerrada: checklist de `11_casos_de_prueba_y_entrega.md` completa)
 - **Ejercicio / puntos**: Ejercicio 8 — 8 pts (8 %)
 - **Scope**:
   - **Carga anticipada**: auditar que toda respuesta con datos de relaciones use `selectinload`/`joinedload` declarado en el repositorio y que nada dependa de la carga perezosa (T-10); detalle de orden con **número fijo de consultas** (mismo número con 2 y con 4 ítems).

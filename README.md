@@ -229,6 +229,32 @@ docker exec -e POSTGRES_DB -i "$PG_CONTENEDOR" sh -c 'stdbuf -o0 psql -U "$POSTG
 - **Automática:** `test/pytest/integridad/test_solo_agregado_sql.py` ejecuta **las mismas sentencias** de ese archivo sobre la base de test migrada y sembrada, y verifica los códigos `23001` y `23503`; así la evidencia manual y la de la suite no pueden divergir.
 - **Límites aceptados:** `TRUNCATE` (que usa `seed.py`) y un superusuario con `session_replication_role = replica` esquivan el disparador por fila (SU-16).
 
+## Caso C-15 (consultas fijas en el detalle)
+
+El detalle de una orden usa un **número fijo de consultas**, sin importar cuántos ítems tenga (RT-TX-06): cada `GET /ordenes/{id}` ejecuta exactamente cinco SELECT —el usuario de la sesión, sus roles vigentes, la orden con vehiculo y cliente precargados, los ítems con sus repuestos y el historial de estados— y ninguno crece con la cantidad de ítems, porque el repositorio declara la carga anticipada (`SELECT` con `LEFT OUTER JOIN`s; DD-31).
+
+**Cómo producir la evidencia:**
+
+```bash
+# 1. Base migrada y sembrada (la de desarrollo sirve; la de test también):
+alembic upgrade head && python seed.py
+
+# 2. Arrancar la API con las consultas visibles en la consola:
+#    Windows (PowerShell): $env:SQL_ECHO="true"; uvicorn main:app --port 8000
+#    bash:                  SQL_ECHO=true uvicorn main:app --port 8000
+
+# 3. Con REST Client sobre test/ordenes.http: login de recepción (bloque C-12
+#    o el de C-15) y después el bloque C-15, que crea una orden con los cuatro
+#    repuestos del seed y pide ambas (la orden 1 del seed tiene 2 ítems).
+#    Guardá la consola con los dos fragmentos a la vista.
+```
+
+- **Resultado esperado:** entre el `BEGIN` y el `COMMIT` de cada `GET /ordenes/{id}` aparecen los mismos cinco `SELECT`, con `WHERE … orden_id IN ($1)` para ítems e historial: un único `IN`, no una consulta por fila.
+- **Captura para la entrega:** la consola de uvicorn con los dos fragmentos (orden de 2 y de 4 ítems) a la vista; no se genera automáticamente.
+- **Evidencia textual de referencia:** `docs/evidencias/C-15-consultas-fijas.txt` (salida real de `SQL_ECHO=true` sobre la base de desarrollo recién sembrada).
+- **Automática:** `test/pytest/asincronia/test_consultas_fijas.py` cuenta los `before_cursor_execute` del motor alrededor del método del repositorio, con sesión propia por medición: orden de 2 ítems, de 4 y con historial largo dan el mismo conteo; el detector se prueba con una réplica que consulta una vez por ítem (crece exactamente en una por ítem).
+
+
 ## Endpoints
 
 > **Desde EJ-5 (T-11)** `main.py` monta dos grupos: abierto (`/health/*`, `/auth/*`) y protegido (el resto), con el control de cambio de contraseña pendiente montado una sola vez sobre el grupo protegido. Las rutas de datos exigen sesión y el rol de la matriz RBAC (`knowledge-base/03_actores_y_roles.md`).
@@ -292,9 +318,9 @@ Todos los listados devuelven el envoltorio `{items, total, page, size, pages}`; 
 | POST | `/ordenes/{id}/terminar` | MECANICO asignado o ADMIN | `EN_REPARACION → TERMINADA` descontando el stock de cada ítem: un movimiento de salida por ítem («Salida por orden de trabajo #N», con `orden_id` y firmado por quien termina), el estado y la línea de historial, **todo en una sola transacción** (todo o nada). `mecanico_id` no cambia, ni siquiera si termina un ADMIN. 200 con el detalle; 404 inexistente; 403 (antes de evaluar el estado) para otro mecánico, recepción o cliente; 409 si no está en reparación o si algún repuesto no alcanza («No hay stock suficiente de Bujía de encendido (BUJ-014): hay 2 y se necesitan 4.») sin dejar ninguna escritura |
 | POST | `/ordenes/{id}/cancelar` | RECEPCION, ADMIN o dueño del vehículo | `PENDIENTE → CANCELADA` sin tocar stock ni `mecanico_id`. La ruta no lleva `requiere_rol`: el servicio decide el permiso **antes** que el estado (403 a un cliente sobre orden ajena y a cualquier MECANICO, aunque la orden no esté pendiente; 409 sólo con permiso). 200 con el detalle; 404 inexistente |
 
-El alta recibe sólo `{vehiculo_id, falla, items: [{repuesto_id, cantidad}]}`: el precio de cada ítem se copia del repuesto al crear la orden (un cambio de precio posterior no la toca) y el total lo calcula el servidor. La orden, sus ítems y la primera línea de historial (`null → PENDIENTE`, firmada por quien la crea) se confirman en un solo bloque; el stock no baja hasta terminarla. El aviso en segundo plano al terminar llega en EJ-8.
+El alta recibe sólo `{vehiculo_id, falla, items: [{repuesto_id, cantidad}]}`: el precio de cada ítem se copia del repuesto al crear la orden (un cambio de precio posterior no la toca) y el total lo calcula el servidor. La orden, sus ítems y la primera línea de historial (`null → PENDIENTE`, firmada por quien la crea) se confirman en un solo bloque; el stock no baja hasta terminarla. Al terminar la orden, el router agenda un **aviso en segundo plano** con `BackgroundTasks` (`app/modules/ordenes/avisos.py`): espera medio segundo y registra en consola «Aviso al cliente … la orden #N terminó y ya puede retirar el vehículo.», después de responder y sólo si la terminación se confirmó (DD-56; el 409 por stock insuficiente y el 404 no dejan aviso).
 
-**Casos manuales:** `test/ordenes.http` reúne C-17 (catálogo y filtro), C-10 (alta y 409), C-06 (detalle propio, ajeno y de un mecánico), iniciar, C-11 (409 por stock insuficiente y lecturas que muestran que nada cambió), C-12 sin aviso (reponer, terminar, stock y movimientos) y C-13 completo (403 ajena, 200 del dueño, 409 de la orden terminada). Pasos: levantar la API, correr `python seed.py` sobre la misma base, definir `PASSWORD_ADMIN`, `PASSWORD_RECEPCION`, `PASSWORD_MECANICO` y `PASSWORD_CLIENTE` con las contraseñas del seed (nunca en el archivo) y ejecutar los bloques **en orden**, porque las altas cambian el estado de la base; volvé a correr `python seed.py` antes de repetir el archivo. Pruebas automatizadas: `test/pytest/ordenes/`.
+**Casos manuales:** `test/ordenes.http` reúne C-17 (catálogo y filtro), C-10 (alta y 409), C-06 (detalle propio, ajeno y de un mecánico), iniciar, C-11 (409 por stock insuficiente y lecturas que muestran que nada cambió), C-12 (reponer, terminar, stock, movimientos y el aviso visible en la consola de uvicorn), C-13 completo (403 ajena, 200 del dueño, 409 de la orden terminada) y C-15 (detalle de 2 y 4 ítems — ver el caso C-15 abajo). Pasos: levantar la API, correr `python seed.py` sobre la misma base, definir `PASSWORD_ADMIN`, `PASSWORD_RECEPCION`, `PASSWORD_MECANICO` y `PASSWORD_CLIENTE` con las contraseñas del seed (nunca en el archivo) y ejecutar los bloques **en orden**, porque las altas cambian el estado de la base; volvé a correr `python seed.py` antes de repetir el archivo. Pruebas automatizadas: `test/pytest/ordenes/` y `test/pytest/asincronia/`.
 
 ## Primer uso después de clonar (una sola vez)
 
